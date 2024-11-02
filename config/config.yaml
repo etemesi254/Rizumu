@@ -1,0 +1,33 @@
+dnr_dataset:
+  bandspit_rnn:
+    # the mix name, contains a mixture of the audio file
+    mix_name: "mix"
+    # the labels from the mix, this is the order in
+    # which they will be loaded so the
+    # dataset loader will return a tuple of tensor
+    # containing (mix,speech,vocals and sfx)
+    labels: ["mix","speech","vocals","sfx"]
+    # model configurations
+    model_config:
+      # sample rate
+      sr: 44100
+      # n_fft window size
+      n_fft: 2048
+      # rough bandspit configuration
+      bandsplits: [[1000,100],[2500,200],[4000,400],[8000,600],[16000,2000],[20000,4000] ]
+      complex_as_channel: true
+      # DNR config is channel
+      is_mono: true
+      # either `rnn` or `att`
+      bottleneck_layer: 'rnn'
+      # affects rnn layers.
+      fc_dim: 128
+      rnn_dim: 256
+      rnn_type: "LSTM"
+
+      bidirectional: true
+      num_layers: 1
+      mlp_dim: 512
+      return_mask: false
+      # you must add t_timestemps based on the last dimension on
+      # the project
