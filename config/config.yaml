@@ -13,9 +13,10 @@ dnr_dataset:
     batch_size: 1
     # whether to shuffle data when training
     shuffle: true
-    num_epochs: 10
+    # number of epochs to go
+    num_epochs: 50
     # whether  we start our model from a previously saved checkpoint or a new model
-    checkpoint: false
+    checkpoint: true
     # if checkpoint is true, start from this checkpoint path
     checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_0/checkpoints/epoch=9-step=320.ckpt"
     model_config:

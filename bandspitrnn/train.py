@@ -42,6 +42,8 @@ def bandspit_train(cfg: DictConfig):
     trainer = pl.Trainer(limit_train_batches=32, max_epochs=model_config["num_epochs"], log_every_n_steps=2)
 
     if model_config["checkpoint"]:
-        trainer.fit(pl_model, dnr_train, dnr_val, ckpt_path=model_config["checkpoint"])
+        # load the checkpoint path and resume training
+        trainer.fit(pl_model, dnr_train, dnr_val, ckpt_path=model_config["checkpoint_path"])
     else:
+        # otherwise start from scratch
         trainer.fit(pl_model, dnr_train, dnr_val)
