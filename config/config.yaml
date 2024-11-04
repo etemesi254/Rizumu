@@ -8,6 +8,11 @@ dnr_dataset:
     # containing (mix,speech,vocals and sfx)
     labels: ["mix","speech","vocals","sfx"]
     # model configurations
+    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv"
+    # batch size of the dataset in training
+    batch_size: 3
+    # whether to shuffle data when training
+    shuffle: true
     model_config:
       # sample rate
       sr: 44100
@@ -24,10 +29,8 @@ dnr_dataset:
       fc_dim: 128
       rnn_dim: 256
       rnn_type: "LSTM"
-
+      t_timesteps: 5168 # 1 minute stft with 2048 generates the following timestep
       bidirectional: true
       num_layers: 1
       mlp_dim: 512
       return_mask: false
-      # you must add t_timestemps based on the last dimension on
-      # the project

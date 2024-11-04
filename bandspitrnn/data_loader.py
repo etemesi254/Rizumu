@@ -1,9 +1,10 @@
 import os
-from typing import Tuple, List
+import time
+from typing import List
 
 import librosa
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 
 def load_and_pad(file: str, n_fft=2048):
@@ -11,8 +12,9 @@ def load_and_pad(file: str, n_fft=2048):
                             mono=False)
     data_tc = torch.from_numpy(data)
 
-    stft = data_tc.stft(n_fft=n_fft, window=None, return_complex=True)
-    new_shape = stft.reshape((1, 1, stft.shape[0], stft.shape[1]))
+    window = torch.hamming_window(n_fft)
+    stft = data_tc.stft(n_fft=n_fft, window=window, return_complex=True)
+    new_shape = stft.reshape((1, stft.shape[0], stft.shape[1]))
     return new_shape, sr
 
 
@@ -49,7 +51,7 @@ class MusicSeparatorDataset(Dataset):
                             correct_path[index] = file
                             break
                         index += 1
-                    audio_files.append(correct_path)
+                audio_files.append(correct_path)
         return audio_files
 
     def __len__(self):
@@ -59,12 +61,20 @@ class MusicSeparatorDataset(Dataset):
         loaded_files = []
 
         for file in self.audio_files[idx]:
-            tensor, sr = load_and_pad(file,self.n_fft)
+            tensor, sr = load_and_pad(file, self.n_fft)
             loaded_files.append(tensor)
 
         return loaded_files
 
 
 if __name__ == '__main__':
-    MusicSeparatorDataset(root_dir="/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv",
-                          files_to_load=["mix", "speech", "music", "sfx"])
+    dataset = MusicSeparatorDataset(root_dir="/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv",
+                                    files_to_load=["mix", "speech", "music", "sfx"])
+
+    start = time.time()
+    de = DataLoader(dataset=dataset, batch_size=3, shuffle=True,num_workers=os.cpu_count())
+    for a in de:
+        print(a[0].shape)
+        break
+    stop = time.time()
+    print(stop - start)

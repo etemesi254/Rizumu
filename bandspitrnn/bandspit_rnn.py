@@ -1,17 +1,17 @@
-import torch
-import torch.nn as nn
 import typing as tp
 
+import soundfile as sf
+import torch
+import torch.nn as nn
 import torchinfo
 from torch import Tensor
-import soundfile as sf
-from band_sequence import BandSequenceModelModule
-from band_spit import BandSplitModule
-from band_transformer import BandTransformerModelModule
-from mask_estimation import MaskEstimationModule
+
+from .band_sequence import BandSequenceModelModule
+from .band_spit import BandSplitModule
+from .band_transformer import BandTransformerModelModule
+from .mask_estimation import MaskEstimationModule
 
 
-torch_window = torch.ones(20)
 
 class BandSplitRNN(nn.Module):
     """
@@ -129,7 +129,7 @@ class BandSplitRNN(nn.Module):
         return x
 
 
-def load_and_pad(file:str,n_fft=2048):
+def load_and_pad(file: str, n_fft=2048):
     import librosa
 
     data, sr = librosa.load(file, sr=None,
@@ -138,25 +138,26 @@ def load_and_pad(file:str,n_fft=2048):
     data_tc = torch.from_numpy(data)
 
     # return d,n_channels,nfft,time
-    stft = data_tc.stft(n_fft=n_fft,window=None,return_complex=True)
-    new_shape = stft.reshape((1,1,stft.shape[0],stft.shape[1]))
-    return new_shape,sr
+    window = torch.hamming_window(n_fft)
+    stft = data_tc.stft(n_fft=n_fft, window=window, return_complex=True)
+    new_shape = stft.reshape((1, 1, stft.shape[0], stft.shape[1]))
+    return new_shape, sr
 
 
-
-def convert_to_audio(tensor:Tensor,n_fft=2048,sample_rate=44100):
+def convert_to_audio(tensor: Tensor, n_fft=2048, sample_rate=44100):
     tensor = tensor.squeeze()
-    c = tensor.istft(n_fft,window=None)
+    window = torch.hamming_window(n_fft)
+    c = tensor.istft(n_fft, window=window)
     d = c.cpu().detach().numpy()
 
-    sf.write(file="out.wav",samplerate=sample_rate,data=d, subtype='PCM_24')
+    sf.write(file="out.wav", samplerate=sample_rate, data=d, subtype='PCM_24')
     print(d.shape)
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     n_fft = 2048
-    (in_features,sr) = load_and_pad('/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv/89918/mix.wav',n_fft)
-    time =  in_features.shape[-1]
+    (in_features, sr) = load_and_pad('/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv/89918/mix.wav', n_fft)
+    time = in_features.shape[-1]
     cfg = {
         "sr": sr,
         "n_fft": n_fft,
@@ -166,12 +167,12 @@ if __name__ == '__main__':
             (4000, 400),
             (8000, 600),
             (16000, 2000),
-            (20000, 4000),
+            (20000, 2000),
         ],
         "complex_as_channel": True,
-        "is_mono":True,
+        "is_mono": True,
         "bottleneck_layer": 'rnn',
-        #"t_timesteps": time,
+        # "t_timesteps": time,
         "fc_dim": 128,
         "rnn_dim": 256,
         "rnn_type": "LSTM",
@@ -185,13 +186,12 @@ if __name__ == '__main__':
     _ = model.eval()
 
     with torch.no_grad():
-        out_features:Tensor = model(in_features)
+        out_features: Tensor = model(in_features)
 
     torchinfo.summary(model)
     convert_to_audio(out_features)
 
-
-    #print(model)
+    # print(model)
     print(f"Total number of parameters: {sum([p.numel() for p in model.parameters()])}")
     print(f"In shape: {in_features.shape}\nOut shape: {out_features.shape}")
     print(f"In dtype: {in_features.dtype}\nOut dtype: {out_features.dtype}")

@@ -1,11 +1,14 @@
-from omegaconf import DictConfig, OmegaConf
 import hydra
-import pprint
+from omegaconf import DictConfig
+
+import bandspitrnn
 
 
 @hydra.main(version_base=None, config_path="./config", config_name="config")
 def my_app(cfg: DictConfig) -> None:
-    pprint.pprint(dict(cfg["dnr_dataset"]["bandspit_rnn"]))
+    bandspitrnn.bandspit_train(cfg)
+    pass
+
 
 if __name__ == "__main__":
     my_app()

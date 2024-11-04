@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import typing as tp
 
-from utils import freq2bands
+from .utils import freq2bands
 
 
 class GLU(nn.Module):
