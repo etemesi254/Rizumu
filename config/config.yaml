@@ -6,7 +6,7 @@ dnr_dataset:
     # which they will be loaded so the
     # dataset loader will return a tuple of tensor
     # containing (mix,speech,vocals and sfx)
-    labels: ["mix","speech","music","sfx"]
+    labels: ["mix", "speech", "music", "sfx"]
     # model configurations
     dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv"
     # batch size of the dataset in training
@@ -14,18 +14,23 @@ dnr_dataset:
     # whether to shuffle data when training
     shuffle: true
     num_epochs: 10
+    # whether  we start our model from a previously saved checkpoint or a new model
+    checkpoint: false
+    # if checkpoint is true, start from this checkpoint path
+    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_0/checkpoints/epoch=9-step=320.ckpt"
     model_config:
       # sample rate
       sr: 44100
       # n_fft window size
       n_fft: 2048
       # rough bandspit configuration
-      bandsplits: [[1000,100],[2500,200],[4000,400],[8000,600],[16000,2000],[20000,4000] ]
+      bandsplits:
+        [[1000, 100], [4000, 400], [8000, 600], [16000, 2000], [20000, 4000]]
       complex_as_channel: true
       # DNR config is channel
       is_mono: true
       # either `rnn` or `att`
-      bottleneck_layer: 'rnn'
+      bottleneck_layer: "rnn"
       # affects rnn layers.
       fc_dim: 128
       rnn_dim: 256
