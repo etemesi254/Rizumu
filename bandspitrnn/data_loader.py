@@ -5,17 +5,14 @@ from typing import List
 import librosa
 import torch
 from torch.utils.data import Dataset, DataLoader
-
+import torchaudio
 
 def load_and_pad(file: str, n_fft=2048):
-    data, sr = librosa.load(file, sr=None,
-                            mono=False)
-    data_tc = torch.from_numpy(data)
+    data, sr = torchaudio.load(file)
 
     window = torch.hamming_window(n_fft)
-    stft = data_tc.stft(n_fft=n_fft, window=window, return_complex=True)
-    new_shape = stft.reshape((1, stft.shape[0], stft.shape[1]))
-    return new_shape, sr
+    stft = data.stft(n_fft=n_fft, window=window, return_complex=True)
+    return stft, sr
 
 
 class MusicSeparatorDataset(Dataset):

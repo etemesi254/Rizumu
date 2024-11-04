@@ -6,13 +6,14 @@ dnr_dataset:
     # which they will be loaded so the
     # dataset loader will return a tuple of tensor
     # containing (mix,speech,vocals and sfx)
-    labels: ["mix","speech","vocals","sfx"]
+    labels: ["mix","speech","music","sfx"]
     # model configurations
     dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv"
     # batch size of the dataset in training
-    batch_size: 3
+    batch_size: 1
     # whether to shuffle data when training
     shuffle: true
+    num_epochs: 10
     model_config:
       # sample rate
       sr: 44100
