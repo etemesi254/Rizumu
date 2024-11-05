@@ -7,15 +7,23 @@ from torch import nn
 
 
 def calculate_istft(tensor: torch.Tensor, n_fft: int = 2048) -> torch.Tensor:
-    return torch.istft(tensor.squeeze().to("cpu"), window=torch.hann_window(window_length=n_fft),
+    """
+    Calculate the Inverse Short Time Fourier Transform using torch
+    :param tensor: The tensor which we are calculating
+    :param n_fft:
+    :return:
+    """
+    return torch.istft(tensor.squeeze().to("cpu"),
+                       window=torch.hann_window(window_length=n_fft),
                        n_fft=n_fft)
 
 
 def calculate_loss(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     """
-    :param a:
-    :param b:
-    :return:
+    Calculate the  MSE loss between two tensors
+    :param a: Input tensor
+    :param b: Another tensor
+    :return: The MSE loss
     """
     loss = torch.nn.functional.mse_loss(a, b)
     return loss
@@ -43,6 +51,28 @@ def calculate_sdr(target_tensor, output_tensor) -> float:
     return sdr
 
 
+def calculate_snr(signal_tensor, noise_tensor):
+    """
+    Calculates the Signal-to-Noise Ratio (SNR) between a signal tensor and a noise tensor.
+
+    Args:
+        signal_tensor: The signal tensor.
+        noise_tensor: The noise tensor.
+
+    Returns:
+        The SNR value in dB.
+    """
+
+    signal_power = torch.mean(signal_tensor ** 2)
+    noise_power = torch.mean(noise_tensor ** 2)
+
+    if noise_power == 0:
+        return float('inf')
+
+    snr = 10 * torch.log10(signal_power / noise_power)
+    return snr.item()
+
+
 class BandPlModel(pl.LightningModule):
     def __init__(self,
                  model: nn.Module,
@@ -63,8 +93,8 @@ class BandPlModel(pl.LightningModule):
             E.g. for the DnR dataset, the mix_name would be "mix"
         :param n_fft: N-fft window length for stft and istft calculation
         """
-        assert mix_name in self.labels, "Mix is not in labels please include it"
-        assert output_label_name in self.labels, "Output label is not in labels please include it"
+        assert mix_name in labels, "Mix is not in labels please include it"
+        assert output_label_name in labels, "Output label is not in labels please include it"
         super().__init__()
         self.model = model
         self.labels = labels
@@ -91,16 +121,18 @@ class BandPlModel(pl.LightningModule):
         assert expected_output is not None, "Output label cannot be None, did you name them correctly"
         return mix_input, expected_output
 
-    def calculate_properties(self, output: torch.Tensor, expected_output: torch.Tensor) -> torch.Tensor:
+    def calculate_properties(self, output: torch.Tensor, expected_output: torch.Tensor, prefix: str) -> torch.Tensor:
         # perform istft
         output_istft = calculate_istft(output, self.n_fft)
         speech_istft = calculate_istft(expected_output, self.n_fft)
 
         loss = calculate_loss(output_istft, speech_istft)
         sdr = calculate_sdr(output_istft, speech_istft)
+        snr = calculate_snr(output_istft, speech_istft)
 
-        self.log("train_loss", loss,prog_bar=True)
-        self.log("train_sdr", sdr,prog_bar=True)
+        self.log(f"{prefix}_loss", loss, prog_bar=True)
+        self.log(f"{prefix}_sdr", sdr, prog_bar=True)
+        self.log(f"{prefix}_snr", snr, prog_bar=True)
         return loss
 
     def training_step(self, batch: List[torch.Tensor], batch_idx):
@@ -109,7 +141,7 @@ class BandPlModel(pl.LightningModule):
 
         output = self.model(mix_input)
 
-        return self.calculate_properties(output, expected_output)
+        return self.calculate_properties(output, expected_output, prefix="train")
 
     def configure_optimizers(self):
         return self.optimizer
@@ -120,4 +152,4 @@ class BandPlModel(pl.LightningModule):
 
         output = self.model(mix_input)
 
-        return self.calculate_properties(output, expected_output)
+        return self.calculate_properties(output, expected_output, prefix="val")

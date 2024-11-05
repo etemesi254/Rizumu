@@ -15,7 +15,7 @@ dnr_dataset:
     # whether to shuffle data when training
     shuffle: true
     # number of epochs to go
-    num_epochs: 51
+    num_epochs: 52
     # whether  we start our model from a previously saved checkpoint or a new model
     checkpoint: true
     # if checkpoint is true, start from this checkpoint path
