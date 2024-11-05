@@ -36,8 +36,13 @@ def bandspit_train(cfg: DictConfig):
     optimizer = Adam(params, lr=1e-3)
 
     n_fft = model_config["model_config"]["n_fft"]
+    output_label = model_config["output_label"]
+    labels = model_config["labels"]
+    mix_name = model_config["mix_name"]
 
-    pl_model = BandPlModel(model=model, optimizer=optimizer, n_fft=n_fft)
+    pl_model = BandPlModel(model=model, optimizer=optimizer, n_fft=n_fft,
+                           labels=labels, output_label_name=output_label,
+                           mix_name=mix_name)
 
     trainer = pl.Trainer(limit_train_batches=32, max_epochs=model_config["num_epochs"], log_every_n_steps=2)
 

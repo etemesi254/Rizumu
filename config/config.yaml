@@ -7,6 +7,7 @@ dnr_dataset:
     # dataset loader will return a tuple of tensor
     # containing (mix,speech,vocals and sfx)
     labels: ["mix", "speech", "music", "sfx"]
+    output_label: "speech"
     # model configurations
     dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv"
     # batch size of the dataset in training
@@ -14,11 +15,12 @@ dnr_dataset:
     # whether to shuffle data when training
     shuffle: true
     # number of epochs to go
-    num_epochs: 50
+    num_epochs: 51
     # whether  we start our model from a previously saved checkpoint or a new model
     checkpoint: true
     # if checkpoint is true, start from this checkpoint path
-    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_0/checkpoints/epoch=9-step=320.ckpt"
+    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_4/checkpoints/epoch=49-step=1600.ckpt"
+
     model_config:
       # sample rate
       sr: 44100
