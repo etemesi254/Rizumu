@@ -63,6 +63,8 @@ class BandPlModel(pl.LightningModule):
             E.g. for the DnR dataset, the mix_name would be "mix"
         :param n_fft: N-fft window length for stft and istft calculation
         """
+        assert mix_name in self.labels, "Mix is not in labels please include it"
+        assert output_label_name in self.labels, "Output label is not in labels please include it"
         super().__init__()
         self.model = model
         self.labels = labels
