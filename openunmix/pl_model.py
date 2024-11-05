@@ -1,9 +1,9 @@
 from typing import List, Tuple
 
-import numpy as np
 import pytorch_lightning as pl
 import torch
-from torch import nn
+import torch.nn as nn
+import numpy as np
 
 
 def calculate_istft(tensor: torch.Tensor, n_fft: int = 2048) -> torch.Tensor:
@@ -14,8 +14,8 @@ def calculate_istft(tensor: torch.Tensor, n_fft: int = 2048) -> torch.Tensor:
     :return:
     """
     return torch.istft(tensor.squeeze().to("cpu"),
-                       window=torch.hann_window(window_length=n_fft),
-                       n_fft=n_fft)
+                       window=torch.hann_window(window_length=n_fft).to("cpu"),
+                       n_fft=n_fft,return_complex=True)
 
 
 def calculate_loss(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
@@ -73,35 +73,23 @@ def calculate_snr(signal_tensor, noise_tensor):
     return snr.item()
 
 
-class BandPlModel(pl.LightningModule):
-    def __init__(self,
-                 model: nn.Module,
+class OpenUnmixLightning(pl.LightningModule):
+    def __init__(self, model: nn.Module,
                  optimizer: torch.optim.Optimizer,
+
                  labels: List[str],
                  output_label_name: str,
                  mix_name: str,
-                 n_fft: int = 2048):
-        """
-        BandSpitRnn model wrapper in pytorch lightning module
-        :param model: The initialized bandspitrnn
-        :param optimizer: The optimizer to use for optimizing the model
-        :param labels: This a list of label names for the training set.
-            E.g. for the DnR dataset, the labels would be ["mix", "speech", "music", "sfx"]
-        :param output_label_name: The output label name for which we are training our model in
-            E.g. if we want to make a speech model using the DnR dataset, the output_label_name would be "speech"
-        :param mix_name: The name of the wav file containing the mixture sample.
-            E.g. for the DnR dataset, the mix_name would be "mix"
-        :param n_fft: N-fft window length for stft and istft calculation
-        """
+                 n_fft: int = 4096):
         assert mix_name in labels, "Mix is not in labels please include it"
         assert output_label_name in labels, "Output label is not in labels please include it"
+
         super().__init__()
         self.model = model
+        self.optimizer = optimizer
         self.labels = labels
         self.output_label_name = output_label_name
         self.mix_name = mix_name
-
-        self.optimizer = optimizer
         self.n_fft = n_fft
 
 
@@ -122,10 +110,10 @@ class BandPlModel(pl.LightningModule):
         assert expected_output is not None, "Output label cannot be None, did you name them correctly"
         return mix_input, expected_output
 
-    def calculate_properties(self, output: torch.Tensor, expected_output: torch.Tensor, prefix: str) -> torch.Tensor:
+    def calculate_properties(self, output_istft: torch.Tensor, speech_istft: torch.Tensor, prefix: str) -> torch.Tensor:
         # perform istft
-        output_istft = calculate_istft(output, self.n_fft)
-        speech_istft = calculate_istft(expected_output, self.n_fft)
+        output_istft = output_istft.squeeze().to("cpu")
+        speech_istft = speech_istft.squeeze().to("cpu")
 
         loss = calculate_loss(output_istft, speech_istft)
         sdr = calculate_sdr(output_istft, speech_istft)
@@ -154,3 +142,4 @@ class BandPlModel(pl.LightningModule):
         output = self.model(mix_input)
 
         return self.calculate_properties(output, expected_output, prefix="val")
+

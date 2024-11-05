@@ -1,21 +1,62 @@
 import os
 import time
-from typing import List
+from typing import List, Optional
 
 import torch
-from torch.utils.data import Dataset, DataLoader
 import torchaudio
+from torch.utils.data import Dataset, DataLoader
 
-def load_and_pad(file: str, n_fft=2048):
-    data, sr = torchaudio.load(file)
+def load_info(path: str) -> dict:
+    """Load audio metadata
 
-    window = torch.hamming_window(n_fft)
-    stft = data.stft(n_fft=n_fft, window=window, return_complex=True)
-    return stft, sr
+    this is a backend_independent wrapper around torchaudio.info
+
+    Args:
+        path: Path of filename
+    Returns:
+        Dict: Metadata with
+        `samplerate`, `samples` and `duration` in seconds
+
+    """
+    # get length of file in samples
+    if torchaudio.get_audio_backend() == "sox":
+        raise RuntimeError("Deprecated backend is not supported")
+
+    info = {}
+    si = torchaudio.info(str(path))
+    info["samplerate"] = si.sample_rate
+    info["samples"] = si.num_frames
+    info["channels"] = si.num_channels
+    info["duration"] = info["samples"] / info["samplerate"]
+    return info
 
 
-class BandSpitMusicSeparatorDataset(Dataset):
-    def __init__(self, root_dir, files_to_load: List[str], n_fft=2048):
+def load_audio(
+    path: str,
+    start: float = 0.0,
+    dur: Optional[float] = None,
+    info: Optional[dict] = None,
+):
+
+    # loads the full track duration
+    if dur is None:
+        # we ignore the case where start!=0 and dur=None
+        # since we have to deal with fixed length audio
+        sig, rate = torchaudio.load(path)
+        return sig, rate
+    else:
+        if info is None:
+            info = load_info(path)
+        num_frames = int(dur * info["samplerate"])
+        frame_offset = int(start * info["samplerate"])
+        sig, rate = torchaudio.load(path, num_frames=num_frames, frame_offset=frame_offset)
+        return sig, rate
+
+
+
+
+class OpenUnmixMusicSeparatorDataset(Dataset):
+    def __init__(self, root_dir, files_to_load: List[str]):
         """
 
         :param root_dir:  The root directory of the dataset, subdirectories should contain data files
@@ -25,7 +66,6 @@ class BandSpitMusicSeparatorDataset(Dataset):
         :param n_fft:  FFT size
         """
         self.root_dir = root_dir
-        self.n_fft = n_fft
         self.audio_files = self._get_audio_files(files_to_load)
 
     def _get_audio_files(self, files_to_load: List[str]):
@@ -57,18 +97,19 @@ class BandSpitMusicSeparatorDataset(Dataset):
         loaded_files = []
 
         for file in self.audio_files[idx]:
-            tensor, sr = load_and_pad(file, self.n_fft)
+            tensor, sr = load_audio(file)
             loaded_files.append(tensor)
 
         return loaded_files
 
 
 if __name__ == '__main__':
-    dataset = BandSpitMusicSeparatorDataset(root_dir="/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv",
-                                            files_to_load=["mix", "speech", "music", "sfx"])
+    dataset = OpenUnmixMusicSeparatorDataset(root_dir="/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv",
+                                             files_to_load=["mix", "speech"])
 
     start = time.time()
-    de = DataLoader(dataset=dataset, batch_size=3, shuffle=True,num_workers=os.cpu_count())
+    de = DataLoader(dataset=dataset, batch_size=3, shuffle=True, num_workers=os.cpu_count())
+
     for a in de:
         print(a[0].shape)
         break

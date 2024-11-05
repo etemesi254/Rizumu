@@ -17,9 +17,11 @@ dnr_dataset:
     # number of epochs to go
     num_epochs: 52
     # whether  we start our model from a previously saved checkpoint or a new model
-    checkpoint: true
+    checkpoint: false
     # if checkpoint is true, start from this checkpoint path
     checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_4/checkpoints/epoch=49-step=1600.ckpt"
+
+    log_dir: "./bandspitrnn_logs"
 
     model_config:
       # sample rate
@@ -43,3 +45,31 @@ dnr_dataset:
       num_layers: 1
       mlp_dim: 512
       return_mask: false
+
+  openunmix:
+    mix_name: "mix"
+    # the labels from the mix, this is the order in
+    # which they will be loaded so the
+    # dataset loader will return a tuple of tensor
+    # containing (mix,speech,vocals and sfx)
+    labels: [ "mix", "speech" ]
+    output_label: "speech"
+    # model configurations
+    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv"
+    # batch size of the dataset in training
+    batch_size: 1
+    # whether to shuffle data when training
+    shuffle: true
+    # number of epochs to go
+    num_epochs: 52
+    # whether  we start our model from a previously saved checkpoint or a new model
+    checkpoint: false
+    # if checkpoint is true, start from this checkpoint path
+    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_4/checkpoints/epoch=49-step=1600.ckpt"
+
+    log_dir: "./openunmix_logs"
+    dataset_config:
+      nb_bins: 2049
+      nb_channels: 1
+
+

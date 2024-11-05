@@ -2,11 +2,12 @@ import os
 
 import pytorch_lightning as pl
 from omegaconf import DictConfig
+from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
 
 from bandspitrnn.bandspit_rnn import BandSplitRNN
-from bandspitrnn.data_loader import MusicSeparatorDataset
+from bandspitrnn.data_loader import BandSpitMusicSeparatorDataset
 from bandspitrnn.pl_model import BandPlModel
 
 
@@ -15,8 +16,8 @@ def bandspit_train(cfg: DictConfig):
     model = BandSplitRNN(**model_config["model_config"])
 
     # dataset loader
-    dataset = MusicSeparatorDataset(root_dir=model_config["dataset_dir"],
-                                    files_to_load=model_config["labels"])
+    dataset = BandSpitMusicSeparatorDataset(root_dir=model_config["dataset_dir"],
+                                            files_to_load=model_config["labels"])
 
     # divide the dataset into train and test
     size = len(dataset)
@@ -42,13 +43,15 @@ def bandspit_train(cfg: DictConfig):
     labels = model_config["labels"]
     mix_name = model_config["mix_name"]
 
+    checkpoint_callback = ModelCheckpoint(dirpath=model_config["log_dir"])
+
     # make our model
     pl_model = BandPlModel(model=model, optimizer=optimizer, n_fft=n_fft,
                            labels=labels, output_label_name=output_label,
                            mix_name=mix_name)
 
     # setup trainer
-    trainer = pl.Trainer(limit_train_batches=32, max_epochs=model_config["num_epochs"], log_every_n_steps=2)
+    trainer = pl.Trainer(limit_train_batches=32, max_epochs=model_config["num_epochs"], log_every_n_steps=2,callbacks=[checkpoint_callback])
 
     if model_config["checkpoint"]:
         # load the checkpoint path and resume training
