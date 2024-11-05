@@ -51,6 +51,18 @@ class BandPlModel(pl.LightningModule):
                  output_label_name: str,
                  mix_name: str,
                  n_fft: int = 2048):
+        """
+        BandSpitRnn model wrapper in pytorch lightning module
+        :param model: The initialized bandspitrnn
+        :param optimizer: The optimizer to use for optimizing the model
+        :param labels: This a list of label names for the training set.
+            E.g. for the DnR dataset, the labels would be ["mix", "speech", "music", "sfx"]
+        :param output_label_name: The output label name for which we are training our model in
+            E.g. if we want to make a speech model using the DnR dataset, the output_label_name would be "speech"
+        :param mix_name: The name of the wav file containing the mixture sample.
+            E.g. for the DnR dataset, the mix_name would be "mix"
+        :param n_fft: N-fft window length for stft and istft calculation
+        """
         super().__init__()
         self.model = model
         self.labels = labels

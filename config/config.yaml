@@ -6,7 +6,7 @@ dnr_dataset:
     # which they will be loaded so the
     # dataset loader will return a tuple of tensor
     # containing (mix,speech,vocals and sfx)
-    labels: ["mix", "speech", "music", "sfx"]
+    labels: ["mix", "speech"]
     output_label: "speech"
     # model configurations
     dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv"
