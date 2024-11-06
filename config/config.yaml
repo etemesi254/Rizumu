@@ -9,7 +9,7 @@ dnr_dataset:
     labels: ["mix", "speech"]
     output_label: "speech"
     # model configurations
-    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv"
+    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/"
     # batch size of the dataset in training
     batch_size: 1
     # whether to shuffle data when training
@@ -55,7 +55,7 @@ dnr_dataset:
     labels: [ "mix", "speech" ]
     output_label: "speech"
     # model configurations
-    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv"
+    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/"
     # batch size of the dataset in training
     batch_size: 1
     # whether to shuffle data when training

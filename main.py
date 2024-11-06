@@ -22,15 +22,17 @@ def my_app() -> None:
 
     parser = ArgumentParser()
 
-    parser.add_argument("--train-bandspitrnn", action="store_true")
-    parser.add_argument("--train-openunmix", action="store_true")
+    parser.add_argument("--train-bandspitrnn", action="store_true",help="Train a bandspitrnn model with pre-configured outputs")
+    parser.add_argument("--train-openunmix", action="store_true",help="Train an openunmix model with pre-configs")
     args =parser.parse_args()
     if args.train_bandspitrnn:
         cfg = compose(config_name="config")
         train_bandspitrnn(cfg)
-    if True or  args.train_openunmix:
+    elif args.train_openunmix:
         cfg = compose(config_name="config")
         openunmix_train(cfg)
+    else:
+        parser.print_help()
 
 
 

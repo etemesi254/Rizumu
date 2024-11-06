@@ -73,7 +73,6 @@ class OpenUnmixMusicSeparatorDataset(Dataset):
         for folder_name in os.listdir(self.root_dir):
             folder_path = os.path.join(self.root_dir, folder_name)
             if os.path.isdir(folder_path):
-                correct_path = [""]
                 files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.endswith('.wav')]
                 correct_path = [""] * len(files_to_load)
                 # sort based on files_to_load specification
