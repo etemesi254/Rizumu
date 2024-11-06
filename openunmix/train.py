@@ -54,6 +54,3 @@ def openunmix_train(cfg: DictConfig):
         # otherwise start from scratch
         trainer.fit(pl_model, dnr_train, dnr_val)
 
-
-if __name__ == '__main__':
-    openunmix_train()

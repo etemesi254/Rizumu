@@ -352,10 +352,6 @@ class Separator(nn.Module):
 
 if __name__ == "__main__":
     import torchinfo
-
     separator = Separator(target_models={"speech": OpenUnmix()})
-
-
-
     torchinfo.summary(separator)
     pass
