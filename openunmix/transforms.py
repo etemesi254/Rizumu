@@ -62,6 +62,7 @@ class TorchSTFT(nn.Module):
 
          # pack batch
         x = x.view(-1, shape[-1])
+        x = x.to(self.window)
 
         complex_stft = torch.stft(
             x,

@@ -6,11 +6,17 @@ import torch.nn as nn
 import torchinfo
 from torch import Tensor
 
-from .band_sequence import BandSequenceModelModule
-from .band_spit import BandSplitModule
-from .band_transformer import BandTransformerModelModule
-from .mask_estimation import MaskEstimationModule
+if __name__=="__main__":
+    from band_sequence import BandSequenceModelModule
+    from band_spit import BandSplitModule
+    from band_transformer import BandTransformerModelModule
+    from mask_estimation import MaskEstimationModule
 
+else:
+    from .band_sequence import BandSequenceModelModule
+    from .band_spit import BandSplitModule
+    from .band_transformer import BandTransformerModelModule
+    from .mask_estimation import MaskEstimationModule
 
 
 class BandSplitRNN(nn.Module):

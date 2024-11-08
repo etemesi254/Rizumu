@@ -15,7 +15,9 @@ def openunmix_train(cfg: DictConfig):
     model_config = cfg["dnr_dataset"]["openunmix"]
 
     dataset = OpenUnmixMusicSeparatorDataset(root_dir=model_config["dataset_dir"],
-                                             files_to_load=model_config["labels"], )
+                                             files_to_load=model_config["labels"],
+                                             preprocess_dct=model_config["use_dct"],
+                                             dct_scaler=model_config["quantizer"])
 
     # divide the dataset into train and test
     size = len(dataset)
@@ -26,7 +28,8 @@ def openunmix_train(cfg: DictConfig):
     channels = model_config["dataset_config"]["nb_channels"]
     model = Separator(target_models={
         model_config["output_label"]: OpenUnmix(nb_channels=channels,
-                                                nb_bins=model_config["dataset_config"]["nb_bins"])},
+                                                nb_bins=model_config["dataset_config"]["nb_bins"],
+                                                nb_layers=model_config["nb_layers"],)},
         nb_channels=channels)
     dnr_train = DataLoader(dataset=dnr_dataset_train, num_workers=os.cpu_count(),
                            persistent_workers=True)
@@ -41,11 +44,11 @@ def openunmix_train(cfg: DictConfig):
 
     checkpoint_callback = ModelCheckpoint(dirpath=model_config["log_dir"])
 
-
     pl_model = OpenUnmixLightning(model=model, optimizer=optimizer, labels=labels, output_label_name=output_label_name,
                                   mix_name=mix_label_name)
 
-    trainer = pl.Trainer(limit_train_batches=32, max_epochs=model_config["num_epochs"], log_every_n_steps=2,callbacks=[checkpoint_callback])
+    trainer = pl.Trainer(limit_train_batches=32, max_epochs=model_config["num_epochs"], log_every_n_steps=2,
+                         callbacks=[checkpoint_callback])
 
     if model_config["checkpoint"]:
         # load the checkpoint path and resume training
@@ -53,4 +56,3 @@ def openunmix_train(cfg: DictConfig):
     else:
         # otherwise start from scratch
         trainer.fit(pl_model, dnr_train, dnr_val)
-

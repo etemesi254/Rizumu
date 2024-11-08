@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 import typing as tp
 
-from .utils import freq2bands
+if __name__=="__main__":
+    from utils import freq2bands
+else:
+    from .utils import freq2bands
 
 
 class BandSplitModule(nn.Module):

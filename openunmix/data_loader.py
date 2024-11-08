@@ -1,62 +1,35 @@
 import os
 import time
-from typing import List, Optional
+from typing import List
 
+import numpy
 import torch
 import torchaudio
+from scipy.fftpack import dct, idct
 from torch.utils.data import Dataset, DataLoader
 
-def load_info(path: str) -> dict:
-    """Load audio metadata
 
-    this is a backend_independent wrapper around torchaudio.info
-
-    Args:
-        path: Path of filename
-    Returns:
-        Dict: Metadata with
-        `samplerate`, `samples` and `duration` in seconds
-
-    """
-    # get length of file in samples
-    if torchaudio.get_audio_backend() == "sox":
-        raise RuntimeError("Deprecated backend is not supported")
-
-    info = {}
-    si = torchaudio.info(str(path))
-    info["samplerate"] = si.sample_rate
-    info["samples"] = si.num_frames
-    info["channels"] = si.num_channels
-    info["duration"] = info["samples"] / info["samplerate"]
-    return info
+def load_audio(path: str):
+    # we ignore the case where start!=0 and dur=None
+    # since we have to deal with fixed length audio
+    sig, rate = torchaudio.load(path)
+    return sig, rate
 
 
-def load_audio(
-    path: str,
-    start: float = 0.0,
-    dur: Optional[float] = None,
-    info: Optional[dict] = None,
-):
-
-    # loads the full track duration
-    if dur is None:
-        # we ignore the case where start!=0 and dur=None
-        # since we have to deal with fixed length audio
-        sig, rate = torchaudio.load(path)
-        return sig, rate
-    else:
-        if info is None:
-            info = load_info(path)
-        num_frames = int(dur * info["samplerate"])
-        frame_offset = int(start * info["samplerate"])
-        sig, rate = torchaudio.load(path, num_frames=num_frames, frame_offset=frame_offset)
-        return sig, rate
-
-
+def preprocess_dct(tensor: torch.Tensor, dct_scaler: float):
+    tensor: numpy.ndarray = tensor.detach().numpy()
+    dct_coeff: numpy.ndarray = dct(tensor, norm='ortho')
+    inv = 1.0 / dct_scaler
+    c = dct_coeff * dct_scaler
+    d = c.astype("int").astype("float") * inv
+    e = idct(d, norm="ortho")
+    return e
 
 
 class OpenUnmixMusicSeparatorDataset(Dataset):
-    def __init__(self, root_dir, files_to_load: List[str]):
+    def __init__(self, root_dir, files_to_load: List[str],
+                 preprocess_dct: bool,
+                 dct_scaler: float):
         """
 
         :param root_dir:  The root directory of the dataset, subdirectories should contain data files
@@ -66,6 +39,8 @@ class OpenUnmixMusicSeparatorDataset(Dataset):
         :param n_fft:  FFT size
         """
         self.root_dir = root_dir
+        self.preprocess_dct = preprocess_dct
+        self.dct_scaler = dct_scaler
         self.audio_files = self._get_audio_files(files_to_load)
 
     def _get_audio_files(self, files_to_load: List[str]):
@@ -97,20 +72,24 @@ class OpenUnmixMusicSeparatorDataset(Dataset):
 
         for file in self.audio_files[idx]:
             tensor, sr = load_audio(file)
-            loaded_files.append(tensor)
+            if self.preprocess_dct:
+                tensor = preprocess_dct(tensor, self.dct_scaler)
+                loaded_files.append(torch.from_numpy(tensor))
+            else:
+                loaded_files.append(tensor)
 
         return loaded_files
 
 
 if __name__ == '__main__':
-    dataset = OpenUnmixMusicSeparatorDataset(root_dir="/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv",
-                                             files_to_load=["mix", "speech"])
+    dataset = OpenUnmixMusicSeparatorDataset(root_dir="/Users/etemesi/PycharmProjects/Spite/data/dnr_v2",
+                                             files_to_load=["mix", "speech"], preprocess_dct=True, dct_scaler=2000)
 
     start = time.time()
-    de = DataLoader(dataset=dataset, batch_size=3, shuffle=True, num_workers=os.cpu_count())
+    de = DataLoader(dataset=dataset, batch_size=3, shuffle=False, num_workers=os.cpu_count())
 
     for a in de:
-        print(a[0].shape)
+        print(a[0].sum())
         break
     stop = time.time()
     print(stop - start)
