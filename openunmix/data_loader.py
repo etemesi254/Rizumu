@@ -2,11 +2,59 @@ import os
 import time
 from typing import List
 
-import numpy
+import numpy as np
+from numpy.lib.stride_tricks import as_strided
+
 import torch
 import torchaudio
 from scipy.fftpack import dct, idct
 from torch.utils.data import Dataset, DataLoader
+
+def split_frame(
+    x: np.ndarray,
+    *,
+    frame_length: int,
+    hop_length: int,
+    axis: int = -1,
+    writeable: bool = False,
+    subok: bool = False,
+) -> np.ndarray:
+    # This implementation is derived from numpy.lib.stride_tricks.sliding_window_view (1.20.0)
+    # https://numpy.org/doc/stable/reference/generated/numpy.lib.stride_tricks.sliding_window_view.html
+
+    x = np.array(x, copy=False, subok=subok)
+
+    if x.shape[axis] < frame_length:
+        raise Exception(
+            f"Input is too short (n={x.shape[axis]:d}) for frame_length={frame_length:d}"
+        )
+
+    if hop_length < 1:
+        raise Exception(f"Invalid hop_length: {hop_length:d}")
+
+    # put our new within-frame axis at the end for now
+    out_strides = x.strides + tuple([x.strides[axis]])
+
+    # Reduce the shape on the framing axis
+    x_shape_trimmed = list(x.shape)
+    x_shape_trimmed[axis] -= frame_length - 1
+
+    out_shape = tuple(x_shape_trimmed) + tuple([frame_length])
+    xw = as_strided(
+        x, strides=out_strides, shape=out_shape, subok=subok, writeable=writeable
+    )
+
+    if axis < 0:
+        target_axis = axis - 1
+    else:
+        target_axis = axis + 1
+
+    xw = np.moveaxis(xw, -1, target_axis)
+
+    # Downsample along the target axis
+    slices = [slice(None)] * xw.ndim
+    slices[axis] = slice(0, None, hop_length)
+    return xw[tuple(slices)]
 
 
 def load_audio(path: str):
@@ -16,14 +64,26 @@ def load_audio(path: str):
     return sig, rate
 
 
-def preprocess_dct(tensor: torch.Tensor, dct_scaler: float):
-    tensor: numpy.ndarray = tensor.detach().numpy()
-    dct_coeff: numpy.ndarray = dct(tensor, norm='ortho')
+def exec_dct(t:np.ndarray,dct_scaler:float):
+    dct_coeff: np.ndarray = dct(t, norm='ortho')
     inv = 1.0 / dct_scaler
     c = dct_coeff * dct_scaler
     d = c.astype("int").astype("float") * inv
     e = idct(d, norm="ortho")
     return e
+
+def preprocess_dct(tensor: torch.Tensor, dct_scaler: float):
+    t: np.ndarray = tensor.detach().numpy()
+    initial_shape = t.shape
+    frame_length = 1024
+    hop_length = 1024
+
+    frames = split_frame(t, frame_length=frame_length, hop_length=hop_length)
+    dct_coefficients = np.array([exec_dct(frame,dct_scaler) for frame in frames.T])
+    dct_coefficients.resize(initial_shape)
+    c = 0
+    return dct_coefficients
+    #return exec_dct(t, dct_scaler)
 
 
 class OpenUnmixMusicSeparatorDataset(Dataset):

@@ -6,7 +6,7 @@ dnr_dataset:
     # which they will be loaded so the
     # dataset loader will return a tuple of tensor
     # containing (mix,speech,vocals and sfx)
-    labels: [ "mix", "speech" ]
+    labels: ["mix", "speech"]
     output_label: "speech"
     # model configurations
     dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/"
@@ -30,7 +30,7 @@ dnr_dataset:
       n_fft: 2048
       # rough bandspit configuration
       bandsplits:
-        [ [ 1000, 100 ], [ 4000, 400 ], [ 8000, 600 ], [ 16000, 2000 ], [ 20000, 4000 ] ]
+        [[1000, 100], [4000, 400], [8000, 600], [16000, 2000], [20000, 4000]]
       complex_as_channel: true
       # DNR config is channel
       is_mono: true
@@ -52,7 +52,7 @@ dnr_dataset:
     # which they will be loaded so the
     # dataset loader will return a tuple of tensor
     # containing (mix,speech,vocals and sfx)
-    labels: [ "mix", "speech" ]
+    labels: ["mix", "speech"]
     output_label: "speech"
     # model configurations
     dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/"
@@ -73,10 +73,8 @@ dnr_dataset:
     # quantizer value if we are using dct preprocessing
     quantizer: 2000
     # number of bi-LSTM layers.
-    nb_layers: 7
+    nb_layers: 3
     # dataset configurations
     dataset_config:
       nb_bins: 2049
       nb_channels: 1
-
-
