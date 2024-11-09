@@ -21,7 +21,7 @@ dnr_dataset:
     # if checkpoint is true, start from this checkpoint path
     checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_4/checkpoints/epoch=49-step=1600.ckpt"
 
-    log_dir: "./bandspitrnn_logs"
+    log_dir: "./logs/bandspitrnn_logs"
 
     model_config:
       # sample rate
@@ -67,7 +67,7 @@ dnr_dataset:
     # if checkpoint is true, start from this checkpoint path
     checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_4/checkpoints/epoch=49-step=1600.ckpt"
 
-    log_dir: "./openunmix_logs"
+    log_dir: "./logs/openunmix_logs"
     # if use DCT is true we preprocess the audio by applying a dct pre-filter before we contine
     use_dct: False
     # quantizer value if we are using dct preprocessing
