@@ -2,8 +2,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from rizumu.filtering import wiener
-
 
 class RSTFT(nn.Module):
     def __init__(self, n_fft: int = 2048,
@@ -78,7 +76,7 @@ class SingleEncoder(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
 
-        self.l1 = nn.Conv1d(self.input_size, self.hidden_size,1)
+        self.l1 = nn.Conv1d(self.input_size, self.hidden_size, 1)
         self.ls = nn.ReLU()
         self.c1 = nn.Conv1d(hidden_size, output_size, 1)
         self.bc1 = nn.BatchNorm1d(output_size)
@@ -87,7 +85,7 @@ class SingleEncoder(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         cre = torch.max(x)
         xd = torch.min(x)
-        if xd.isnan().any() :
+        if xd.isnan().any():
             raise Exception(f"xd is nan")
         # permute to have n-bins as final, and nb_frames as second last
         rx_a = x.permute(0, 2, 1)
@@ -136,7 +134,10 @@ class SingleDecoder(nn.Module):
 
 class RizumuModel(nn.Module):
 
-    def __init__(self, n_fft=2048, hidden_size: int = 512, real_layers: int = 3, imag_layers: int = 2,
+    def __init__(self, n_fft=2048,
+                 hidden_size: int = 512,
+                 real_layers: int = 3,
+                 imag_layers: int = 2,
                  skip_connection: bool = True):
         super(RizumuModel, self).__init__()
 
@@ -179,6 +180,8 @@ class RizumuModel(nn.Module):
         initial_size = x.shape[-1]
         # compute stft of the batch
         x = self.stft(x)
+        # normalize
+
         y = x
         # at this point we have the following dimensions
         # (n_channels,nb_frames,n_bins)
@@ -191,12 +194,13 @@ class RizumuModel(nn.Module):
         # new dimensions are (n_channels,n_bins,nb_frames)
         real = x[0:1].squeeze(dim=0)
         imag = x[1:2].squeeze(dim=0)
-        real_max = real.max()
-        imag_max = imag.max()
-        # normalize
-        real = torch.nn.functional.normalize(real, dim=1, p=2)
-        imag = torch.nn.functional.normalize(imag, dim=1, p=2)
 
+        inv_real_max = 1. / (real.max() + 1e-8)
+        inv_imag_max = 1. / (imag.max() + 1e-8)
+
+        # normalize
+        real = real * inv_real_max
+        imag = imag * inv_imag_max
 
         # encode the real and imaginary parts
         rx = self.real_encoder(real)
@@ -206,13 +210,16 @@ class RizumuModel(nn.Module):
         rx_1 = self.real_bottleneck(rx)
 
         # decode and unnormalize
-        ix_2 = self.imag_decoder(ix_1)*imag_max
-        rx_2 = self.real_decoder(rx_1)*real_max
+        # multiply by real to act as a mask, making it look
+        # like a skip connection
+        ix_2 = self.imag_decoder(ix_1) * imag
+        rx_2 = self.real_decoder(rx_1) * real
 
         # combine the real and imaginary layers back
         # add a new dimension we lost from the  squeeze and then join them on that layer
         # and squeeze them again
-        x = torch.cat((rx_2.unsqueeze(-1), ix_2.unsqueeze(-1)), -1)
+        x = torch.cat((rx_2.unsqueeze(-1) * (1.0 / inv_real_max),
+                       ix_2.unsqueeze(-1) * (1.0 / inv_imag_max)), -1)
         x = torch.view_as_complex(x)
 
         if len(x.shape) == 2:
@@ -223,7 +230,7 @@ class RizumuModel(nn.Module):
         # compute istft
         self.istft.length = initial_size
         # de normalize
-        x = y * x
+
         x = self.istft(x)
         # treat the result as a mask
         return x
@@ -240,6 +247,5 @@ if __name__ == '__main__':
     output: torch.Tensor = model(input)
     loss = F.mse_loss(output, input, reduction='mean')
 
-
-
     print(loss.item())
+    loss.backward()

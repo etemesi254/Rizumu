@@ -69,12 +69,7 @@ def rizumu_train_oldschool(cfg: DictConfig):
     dnr_train = DataLoader(dataset=dnr_dataset_train, num_workers=os.cpu_count(),
                            persistent_workers=True, batch_size=None)
 
-    dnr_val = DataLoader(dataset=dnr_dataset_val, num_workers=os.cpu_count(),
-                         persistent_workers=True, batch_size=None)
 
-    labels = model_config["labels"]
-    output_label_name = model_config["output_label"]
-    mix_label_name = model_config["mix_name"]
     if True:
         model = RizumuModel(n_fft=2048)
     else:
@@ -82,17 +77,18 @@ def rizumu_train_oldschool(cfg: DictConfig):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     model.train()
-    for epoch in range(model_config["num_epochs"]):
-        for batch in dnr_train:
-            mix,speech  = batch
+    with torch.set_grad_enabled(True):
+        for epoch in range(model_config["num_epochs"]):
+            for batch in dnr_train:
+                mix,speech  = batch
 
-            expected = model(mix)
-            loss = torch.nn.functional.mse_loss(expected.squeeze(), speech.squeeze())
-            print("Loss:", loss.item())
-            sdr = calculate_sdr(speech,expected)
-            print("SDR:", sdr)
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+                expected = model(mix)
+                loss = torch.nn.functional.mse_loss(expected, speech)
+                print("Loss:", loss.item())
+                sdr = calculate_sdr(speech,expected)
+                print("SDR:", sdr)
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
 
 
