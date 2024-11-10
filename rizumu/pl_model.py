@@ -1,9 +1,11 @@
 from typing import List, Tuple
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
-import torch.nn as nn
-import numpy as np
+from torch.optim import Adam
+
+from rizumu.model import RizumuModel
 
 
 def calculate_loss(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
@@ -61,25 +63,25 @@ def calculate_snr(signal_tensor, noise_tensor):
     return snr.item()
 
 
-class OpenUnmixLightning(pl.LightningModule):
-    def __init__(self, model: nn.Module,
-                 optimizer: torch.optim.Optimizer,
-
+class RizumuLightning(pl.LightningModule):
+    def __init__(self,
                  labels: List[str],
                  output_label_name: str,
                  mix_name: str,
-                 n_fft: int = 4096):
+                 n_fft: int = 2048,
+                 hidden_size: int = 512,
+                 real_layers: int = 3,
+                 imag_layers: int = 2):
         assert mix_name in labels, "Mix is not in labels please include it"
         assert output_label_name in labels, "Output label is not in labels please include it"
 
         super().__init__()
-        self.model = model
-        self.optimizer = optimizer
+        self.save_hyperparameters()
+        self.model = RizumuModel(n_fft=n_fft, hidden_size=hidden_size, real_layers=real_layers, imag_layers=imag_layers)
+        self.optimizer = Adam(self.model.parameters(), lr=1e-3)
         self.labels = labels
         self.output_label_name = output_label_name
         self.mix_name = mix_name
-        self.n_fft = n_fft
-
 
     def get_batch(self, batch: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
 
@@ -115,9 +117,7 @@ class OpenUnmixLightning(pl.LightningModule):
     def training_step(self, batch: List[torch.Tensor], batch_idx):
         # from our batch  place labels with
         mix_input, expected_output = self.get_batch(batch)
-
         output = self.model(mix_input)
-
         return self.calculate_properties(output, expected_output, prefix="train")
 
     def configure_optimizers(self):
@@ -130,4 +130,3 @@ class OpenUnmixLightning(pl.LightningModule):
         output = self.model(mix_input)
 
         return self.calculate_properties(output, expected_output, prefix="val")
-

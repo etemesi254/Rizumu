@@ -209,7 +209,7 @@ class Separator(nn.Module):
             n_fft: int = 4096,
             n_hop: int = 1024,
             nb_channels: int = 2,
-            wiener_win_len: Optional[int] = 300,
+            wiener_win_len: Optional[int] = None,
             filterbank: str = "torch",
     ):
         super(Separator, self).__init__()
@@ -354,4 +354,6 @@ if __name__ == "__main__":
     import torchinfo
     separator = Separator(target_models={"speech": OpenUnmix(nb_bins=2049,nb_channels=1,nb_layers=7)})
     torchinfo.summary(separator)
+
+
     pass

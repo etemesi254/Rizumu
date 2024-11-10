@@ -86,7 +86,7 @@ def preprocess_dct(tensor: torch.Tensor, dct_scaler: float):
     #return exec_dct(t, dct_scaler)
 
 
-class OpenUnmixMusicSeparatorDataset(Dataset):
+class RizumuSeparatorDataset(Dataset):
     def __init__(self, root_dir, files_to_load: List[str],
                  preprocess_dct: bool,
                  dct_scaler: float):
@@ -142,8 +142,8 @@ class OpenUnmixMusicSeparatorDataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = OpenUnmixMusicSeparatorDataset(root_dir="/Users/etemesi/PycharmProjects/Spite/data/dnr_v2",
-                                             files_to_load=["mix", "speech"], preprocess_dct=True, dct_scaler=2000)
+    dataset = RizumuSeparatorDataset(root_dir="/Users/etemesi/PycharmProjects/Spite/data/dnr_v2",
+                                             files_to_load=["mix", "speech"], preprocess_dct=False, dct_scaler=2000)
 
     start = time.time()
     de = DataLoader(dataset=dataset, batch_size=3, shuffle=False, num_workers=os.cpu_count())

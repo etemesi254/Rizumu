@@ -17,11 +17,10 @@ dnr_dataset:
     # number of epochs to go
     num_epochs: 52
     # whether  we start our model from a previously saved checkpoint or a new model
-    checkpoint: false
+    checkpoint: true
     # if checkpoint is true, start from this checkpoint path
-    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_4/checkpoints/epoch=49-step=1600.ckpt"
-
-    log_dir: "./logs/bandspitrnn_logs"
+    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/bandspitrnn_logs/epoch=38-step=1248.ckpt"
+    log_dir: "./chekpoints/bandspitrnn_logs"
 
     model_config:
       # sample rate
@@ -66,8 +65,7 @@ dnr_dataset:
     checkpoint: false
     # if checkpoint is true, start from this checkpoint path
     checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/lightning_logs/version_4/checkpoints/epoch=49-step=1600.ckpt"
-
-    log_dir: "./logs/openunmix_logs"
+    log_dir: "./chekpoints/openunmix_logs"
     # if use DCT is true we preprocess the audio by applying a dct pre-filter before we contine
     use_dct: False
     # quantizer value if we are using dct preprocessing
@@ -75,6 +73,23 @@ dnr_dataset:
     # number of bi-LSTM layers.
     nb_layers: 3
     # dataset configurations
+    dataset_config:
+      nb_bins: 2049
+      nb_channels: 1
+  rizumu:
+    mix_name: "mix"
+    labels: [ "mix", "speech" ]
+    output_label: "speech"
+    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/"
+    batch_size: 1
+    shuffle: true
+    num_epochs: 52
+    checkpoint: false
+    checkpoint_path: ""
+    log_dir: "./chekpoints/rizumu_logs"
+    use_dct: False
+    quantizer: 2000
+    nb_layers: 3
     dataset_config:
       nb_bins: 2049
       nb_channels: 1

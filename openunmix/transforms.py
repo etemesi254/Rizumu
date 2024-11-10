@@ -76,6 +76,7 @@ class TorchSTFT(nn.Module):
             return_complex=True,
         )
         stft_f = torch.view_as_real(complex_stft)
+        p = stft_f.unsqueeze(0)
         # unpack batch
         stft_f = stft_f.view(shape[:-1] + stft_f.shape[-3:])
         return stft_f
