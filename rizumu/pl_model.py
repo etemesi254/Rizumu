@@ -76,6 +76,7 @@ class RizumuLightning(pl.LightningModule):
         assert output_label_name in labels, "Output label is not in labels please include it"
 
         super().__init__()
+
         self.save_hyperparameters()
         self.model = RizumuModel(n_fft=n_fft, hidden_size=hidden_size, real_layers=real_layers, imag_layers=imag_layers)
         self.optimizer = Adam(self.model.parameters(), lr=1e-3)

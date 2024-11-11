@@ -1,10 +1,12 @@
+from typing import List
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 
 class RSTFT(nn.Module):
-    def __init__(self, n_fft: int = 2048,
+    def __init__(self, n_fft: int = 4096,
                  win_length: int | None = None,
                  hop_length: int | None = None,
                  ):
@@ -83,7 +85,6 @@ class SingleEncoder(nn.Module):
         self.tan1 = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        cre = torch.max(x)
         xd = torch.min(x)
         if xd.isnan().any():
             raise Exception(f"xd is nan")
@@ -108,12 +109,6 @@ class SingleDecoder(nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
 
-        # self.l1 = nn.Conv1d(self.input_size, self.hidden_size, 1)
-        # self.ls = nn.ReLU()
-        # self.c1 = nn.Conv1d(hidden_size, output_size, 1)
-        # self.bc1 = nn.BatchNorm1d(output_size)
-        # self.tan1 = nn.Tanh()
-
         self.tan1 = nn.Tanh()
         self.bc1 = nn.BatchNorm1d(input_size)
         self.c1 = nn.ConvTranspose1d(input_size, hidden_size, 1)
@@ -134,11 +129,10 @@ class SingleDecoder(nn.Module):
 
 class RizumuModel(nn.Module):
 
-    def __init__(self, n_fft=2048,
+    def __init__(self, n_fft=4096,
                  hidden_size: int = 512,
                  real_layers: int = 3,
-                 imag_layers: int = 2,
-                 skip_connection: bool = True):
+                 imag_layers: int = 2):
         super(RizumuModel, self).__init__()
 
         # first layer is an stft layer to convert the waveform to stft
@@ -154,20 +148,42 @@ class RizumuModel(nn.Module):
         hs_quarter = hidden_size // 4
 
         # down u-net
-        self.real_encoder = nn.Sequential(SingleEncoder(last_param, hidden_size, hs_half),
-                                          SingleEncoder(hs_half, hs_quarter, hs_quarter))
-        self.imag_encoder = nn.Sequential(SingleEncoder(last_param, hidden_size, hs_half),
-                                          SingleEncoder(hs_half, hs_quarter, hs_quarter))
+        self.re1 = SingleEncoder(last_param, hidden_size, hs_half)
+        self.re2 = SingleEncoder(hs_half, hidden_size, hs_quarter)
+
+        self.ie1 = SingleEncoder(last_param, hidden_size, hs_half)
+        self.ie2 = SingleEncoder(hs_half, hidden_size, hs_quarter)
+
         # bottleneck
-        self.real_bottleneck = BLSTM(hidden_size // 4, layers=self.real_layers, skip=True)
-        self.imag_bottleneck = BLSTM(hidden_size // 4, layers=self.imag_layers, skip=True)
+        self.real_bottleneck = BLSTM(hs_quarter, layers=self.real_layers, skip=True)
+        self.imag_bottleneck = BLSTM(hs_quarter, layers=self.imag_layers, skip=True)
+
         # up u-net
         self.real_decoder = nn.Sequential(SingleDecoder(hs_quarter, hidden_size, hs_half),
                                           SingleDecoder(hs_half, hidden_size, last_param))
-        self.imag_decoder = nn.Sequential(SingleDecoder(hs_quarter, hidden_size, hs_half),
-                                          SingleDecoder(hs_half, hidden_size, last_param))
+
+        self.rd1 = SingleDecoder(hs_quarter, hidden_size, hs_half)
+        self.rd2 = SingleDecoder(hs_half, hidden_size, last_param)
+
+        self.id1 = SingleDecoder(hs_quarter, hidden_size, hs_half)
+        self.id2 = SingleDecoder(hs_half, hidden_size, last_param)
 
         self.istft = RISTFT(n_fft=n_fft)
+
+    def pxe(self, x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
+            decoders: [nn.Module]) -> torch.Tensor:
+        y = x
+        outputs: List[torch.Tensor] = []
+        for encoder in encoders:
+            x = encoder(x)
+            outputs.append(x)
+        x = bottleneck(x)
+        # reverse outputs
+        outputs.reverse()
+        for arr, decoder in zip(outputs, decoders):
+            x = decoder(arr*x)
+
+        return x * y
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -180,9 +196,6 @@ class RizumuModel(nn.Module):
         initial_size = x.shape[-1]
         # compute stft of the batch
         x = self.stft(x)
-        # normalize
-
-        y = x
         # at this point we have the following dimensions
         # (n_channels,nb_frames,n_bins)
         # convert to real tensor, adds a dimension to x to separate real and imaginary
@@ -198,41 +211,45 @@ class RizumuModel(nn.Module):
         inv_real_max = 1. / (real.max() + 1e-8)
         inv_imag_max = 1. / (imag.max() + 1e-8)
 
+        real_max = 1.0 / inv_real_max
+        imag_max = 1.0 / inv_imag_max
+
         # normalize
         real = real * inv_real_max
         imag = imag * inv_imag_max
 
-        # encode the real and imaginary parts
-        rx = self.real_encoder(real)
-        ix = self.imag_encoder(imag)
-        # bottleneck
-        ix_1 = self.imag_bottleneck(ix)
-        rx_1 = self.real_bottleneck(rx)
+        # # encode the real and imaginary parts
+        # rx_1 = self.real_encoder(real)
+        # # encode one layer
+        #
+        # ix_1 = self.imag_encoder(imag)
+        # # bottleneck
+        # ix_1 = self.imag_bottleneck(ix)
+        # rx_1 = self.real_bottleneck(rx)
 
         # decode and unnormalize
         # multiply by real to act as a mask, making it look
         # like a skip connection
-        ix_2 = self.imag_decoder(ix_1) * imag
-        rx_2 = self.real_decoder(rx_1) * real
+        ix_2 = self.pxe(imag, [self.ie1, self.ie2], self.imag_bottleneck, [self.id1, self.id2])
+        rx_2 = self.pxe(real, [self.re1, self.re2], self.real_bottleneck, [self.rd1, self.rd2])
 
         # combine the real and imaginary layers back
         # add a new dimension we lost from the  squeeze and then join them on that layer
         # and squeeze them again
-        x = torch.cat((rx_2.unsqueeze(-1) * (1.0 / inv_real_max),
-                       ix_2.unsqueeze(-1) * (1.0 / inv_imag_max)), -1)
+        x = torch.cat((rx_2.unsqueeze(-1) * real_max,
+                       ix_2.unsqueeze(-1) * imag_max), -1)
         x = torch.view_as_complex(x)
 
         if len(x.shape) == 2:
             # one dimensional layout, add the 2d that was lost
+            # in the squeeze
             x = x.unsqueeze(0)
 
         x = x.permute(0, 2, 1)
         # compute istft
         self.istft.length = initial_size
         # de normalize
-
         x = self.istft(x)
-        # treat the result as a mask
         return x
 
 
@@ -240,9 +257,9 @@ if __name__ == '__main__':
     import torchinfo
 
     model = RizumuModel(n_fft=4096)
-    torchinfo.summary(model)
+    input = torch.randn(1, 199000)
 
-    input = torch.randn(1, 19900)
+    torchinfo.summary(model, input_data=input)
 
     output: torch.Tensor = model(input)
     loss = F.mse_loss(output, input, reduction='mean')

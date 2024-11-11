@@ -5,6 +5,7 @@ import torch
 from omegaconf import DictConfig
 from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.utils.data import random_split, DataLoader
+from tqdm import tqdm
 
 from openunmix.model import Separator, OpenUnmix
 from rizumu.data_loader import RizumuSeparatorDataset
@@ -27,10 +28,10 @@ def rizumu_train(cfg: DictConfig):
     dnr_dataset_train, dnr_dataset_val = random_split(dataset=dataset, lengths=[train_size, test_size])
 
     dnr_train = DataLoader(dataset=dnr_dataset_train, num_workers=os.cpu_count(),
-                           persistent_workers=True,batch_size=None)
+                           persistent_workers=True, batch_size=None)
 
     dnr_val = DataLoader(dataset=dnr_dataset_val, num_workers=os.cpu_count(),
-                         persistent_workers=True,batch_size=None)
+                         persistent_workers=True, batch_size=None)
 
     labels = model_config["labels"]
     output_label_name = model_config["output_label"]
@@ -41,8 +42,10 @@ def rizumu_train(cfg: DictConfig):
     pl_model = RizumuLightning(labels=labels, output_label_name=output_label_name,
                                mix_name=mix_label_name)
 
-    trainer = pl.Trainer(limit_train_batches=32, max_epochs=model_config["num_epochs"], log_every_n_steps=2,
-                         callbacks=[checkpoint_callback])
+    # mps accelerator generates,nan seems like a pytorch issue
+    # see https://discuss.pytorch.org/t/device-mps-is-producing-nan-weights-in-nn-embedding/159067
+    trainer = pl.Trainer(max_epochs=model_config["num_epochs"], log_every_n_steps=2,
+                         callbacks=[checkpoint_callback], accelerator="cpu")
 
     if model_config["checkpoint"]:
         # load the checkpoint path and resume training
@@ -69,26 +72,42 @@ def rizumu_train_oldschool(cfg: DictConfig):
     dnr_train = DataLoader(dataset=dnr_dataset_train, num_workers=os.cpu_count(),
                            persistent_workers=True, batch_size=None)
 
-
     if True:
         model = RizumuModel(n_fft=2048)
     else:
-        model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049,nb_channels=1,nb_layers=7)})
+        model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=7)})
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device, non_blocking=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     model.train()
     with torch.set_grad_enabled(True):
         for epoch in range(model_config["num_epochs"]):
+            sum_sdr = 0
+            sum_loss = 0
+            iteration = 0
+
+            pbar = tqdm(total=len(dnr_train))
+
             for batch in dnr_train:
-                mix,speech  = batch
+                pbar.update()
+                pbar.set_description(f"Epoch {epoch + 1}/{model_config['num_epochs']}")
+                mix, speech = batch
+                mix = mix.to(device, non_blocking=False)
+                speech = speech.to(device, non_blocking=False)
 
                 expected = model(mix)
+                expected = expected.to(device, non_blocking=False)
                 loss = torch.nn.functional.mse_loss(expected, speech)
-                print("Loss:", loss.item())
-                sdr = calculate_sdr(speech,expected)
-                print("SDR:", sdr)
+
+                sum_loss += loss.item()
+                sum_sdr += calculate_sdr(expected, speech)
+                iteration += 1
+
+                pbar.set_postfix({"sdr": sum_sdr / iteration, "loss": sum_loss / iteration})
+
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
 
-
+            pbar.close()
