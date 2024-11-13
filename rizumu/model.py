@@ -4,6 +4,8 @@ import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
 
+from rizumu.filtering import wiener
+
 norm_bias = 1e-8
 
 
@@ -176,9 +178,9 @@ def pxe(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
 class RizumuModel(nn.Module):
 
     def __init__(self, n_fft=4096,
-                 hidden_size: int = 256,
-                 real_layers: int = 3,
-                 imag_layers: int = 2, weiner: bool = True):
+                 hidden_size: int = 1024,
+                 real_layers: int = 5,
+                 imag_layers: int = 5, weiner: bool = True):
         super(RizumuModel, self).__init__()
 
         # first layer is an stft layer to convert the waveform to stft
@@ -189,8 +191,7 @@ class RizumuModel(nn.Module):
         self.real_layers = real_layers
 
         self.hidden_size = hidden_size
-        # self.weiner = weiner
-        # self.weiner_fn = TorchWiener()
+        self.weiner = weiner
         # self.weiner_fn.requires_grad_(False)
 
         hs_half = hidden_size // 2
@@ -279,15 +280,14 @@ class RizumuModel(nn.Module):
         # if self.weiner:
         #     # spectogram is 3d, so add a 4d
         #
-        #     p: torch.Tensor = x.clone().unsqueeze(-1)
+        #     x: torch.Tensor = x.unsqueeze(-1)
         #     # permute to arrange to a weiner style
-        #     p = p.permute(1, 2, 0, 3)
+        #     x = x.permute(1, 2, 0, 3)
         #     stft_mix = stft_mix.permute(1, 2, 0)
         #
-        #     p = self.weiner_fn(x, stft_mix)
-        #     p = x.permute(3, 2, 0, 1)
-        #     p = x.squeeze(dim=0)
-        #     return p
+        #     x = wiener(x, stft_mix, iterations=0)
+        #     x = x.permute(3, 2, 0, 1)
+        #     x = x.squeeze(dim=0)
 
         # compute istft
         self.istft.length = initial_size
