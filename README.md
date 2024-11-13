@@ -8,3 +8,13 @@
 | v3      | openunmix   | 51     | full dataset with (3)+nb_layers increased to 7      |
 | v4      | bandspitrnn | 37     | Initial bandspitrnn test on data                    |
 | v5      | openunmix   | -      | Openunmix with full dataset plus dct on frame basis |
+
+
+
+## speed
+
+5.77 it/s -> GPU
+2.22 it/2 -> CPU
+
+Machine Config
+- Apple M3 Pro 

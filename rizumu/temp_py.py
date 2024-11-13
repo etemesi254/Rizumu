@@ -1,52 +1,25 @@
-import numpy as np
-from torch import tensor
 import torch
+import torchaudio
 
-print('numpy', np.__version__)
-print('pytorch', torch.__version__)
+audio, sr = torchaudio.load("/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/90449/mix.wav")
 
-device = torch.device("mps")
+c = torch.stft(audio, 2048, return_complex=True, window=torch.hann_window(2048))
 
-list1 = np.array([[0.0201, 0.0185, 0.0181, 0.0185, 0.0196, 0.0215, 0.0246, 0.0273, 0.0274,
-         0.0252, 0.0212, 0.0179, 0.0167, 0.0164, 0.0168, 0.0188, 0.0216, 0.0237,
-         0.0260, 0.0284, 0.0331, 0.0389, 0.0445, 0.0494, 0.0508, 0.0449, 0.0341,
-         0.0282, 0.0299, 0.0373, 0.0462, 0.0552, 0.0621, 0.0649, 0.0649, 0.0652,
-         0.0692, 0.0742, 0.0725, 0.0671, 0.0590, 0.0530, 0.0503, 0.0543, 0.0609,
-         0.0615, 0.0509, 0.0394, 0.0312, 0.0279, 0.0240, 0.0248, 0.0276, 0.0312,
-         0.0341, 0.0359, 0.0379, 0.0391, 0.0411, 0.0441, 0.0473, 0.0492, 0.0480,
-         0.0465],
-        [0.1648, 0.1620, 0.1533, 0.1466, 0.1445, 0.1462, 0.1505, 0.1573, 0.1576,
-         0.1514, 0.1417, 0.1325, 0.1296, 0.1290, 0.1285, 0.1242, 0.1220, 0.1227,
-         0.1244, 0.1254, 0.1266, 0.1319, 0.1366, 0.1380, 0.1338, 0.1263, 0.1234,
-         0.1246, 0.1262, 0.1224, 0.1117, 0.0965, 0.0872, 0.0852, 0.0914, 0.0982,
-         0.1021, 0.1045, 0.1106, 0.1168, 0.1230, 0.1246, 0.1247, 0.1238, 0.1233,
-         0.1240, 0.1258, 0.1252, 0.1241, 0.1235, 0.1229, 0.1225, 0.1224, 0.1241,
-         0.1342, 0.1427, 0.1462, 0.1418, 0.1322, 0.1239, 0.1132, 0.1103, 0.1116,
-         0.1172]])
-list2 = np.array([[0.0523, 0.0481, 0.0444, 0.0415, 0.0392, 0.0378, 0.0370, 0.0368, 0.0387,
-         0.0430, 0.0493, 0.0561, 0.0612, 0.0639, 0.0645, 0.0637],
-        [0.1189, 0.1251, 0.1285, 0.1287, 0.1257, 0.1213, 0.1181, 0.1152, 0.1141,
-         0.1135, 0.1130, 0.1105, 0.1073, 0.1035, 0.0985, 0.0967]])
-list3 = np.array([[-1., -1., -1., -1., -1., -1., -1., -1., -1., -1., -1., -1., -1., -1.,
-         -1., -1.],
-        [-1., -1., -1., -1., -1., -1., -1., -1., -1., -1., -1., -1., -1., -1.,
-         -1., -1.]])
+d = torch.view_as_real(c)
+e,f = torch.split(d,1,dim=-1)
 
-input1 = tensor(list1)
-input2 = tensor(list2)
-input3 = tensor(list3)
+print(e.max())
+print(e.min())
 
-gpu_list = []
+print(f.max())
+print(f.min())
 
-for i in range(100):
-    gpu1 = input1.float().to(device=device, non_blocking=True)
-    gpu2 = input2.float().to(device=device, non_blocking=True)
-    gpu3 = input3.float().to(device=device, non_blocking=True)
-    if len(gpu_list) > 0:
-        print((gpu1 == gpu_list[0][0]).all())
-        print((gpu2 == gpu_list[0][1]).all())
-        print((gpu3 == gpu_list[0][2]).all())
-    gpu_list.append([gpu1, gpu2, gpu3])
-    print(gpu1)
-    print(gpu2)
-    print(gpu3)
+
+g = d.permute(3, 0, 2, 1)
+e,f = torch.split(g,1,dim=0)
+print("\n\n")
+print(e.max())
+print(e.min())
+
+print(f.max())
+print(f.min())

@@ -47,7 +47,7 @@ def openunmix_train(cfg: DictConfig):
     pl_model = OpenUnmixLightning(model=model, optimizer=optimizer, labels=labels, output_label_name=output_label_name,
                                   mix_name=mix_label_name)
 
-    trainer = pl.Trainer(limit_train_batches=32, max_epochs=model_config["num_epochs"], log_every_n_steps=2,
+    trainer = pl.Trainer( max_epochs=model_config["num_epochs"], log_every_n_steps=2,
                          callbacks=[checkpoint_callback])
 
     if model_config["checkpoint"]:

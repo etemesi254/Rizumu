@@ -119,6 +119,9 @@ class RizumuLightning(pl.LightningModule):
         # from our batch  place labels with
         mix_input, expected_output = self.get_batch(batch)
         output = self.model(mix_input)
+        if self.device == "mps":
+            torch.mps.synchronize()
+
         return self.calculate_properties(output, expected_output, prefix="train")
 
     def configure_optimizers(self):
@@ -130,4 +133,9 @@ class RizumuLightning(pl.LightningModule):
 
         output = self.model(mix_input)
 
+        if self.device == "mps":
+            torch.mps.synchronize()
         return self.calculate_properties(output, expected_output, prefix="val")
+
+
+

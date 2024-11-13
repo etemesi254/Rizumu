@@ -1,3 +1,4 @@
+import time
 from typing import Optional, Mapping
 
 import numpy as np
@@ -126,12 +127,11 @@ class OpenUnmix(nn.Module):
         nb_frames, nb_samples, nb_channels, nb_bins = x.data.shape
 
         mix = x.detach().clone()
-
         # crop
         x = x[..., : self.nb_bins]
         # shift and scale input to mean=0 std=1 (across all bins)
-        x = x + self.input_mean
-        x = x * self.input_scale
+        # x = x + self.input_mean
+        # x = x * self.input_scale
 
         # to (nb_frames*nb_samples, nb_channels*nb_bins)
         # and encode to (nb_frames*nb_samples, hidden_size)
@@ -162,8 +162,8 @@ class OpenUnmix(nn.Module):
         x = x.reshape(nb_frames, nb_samples, nb_channels, self.nb_output_bins)
 
         # apply output scaling
-        x *= self.output_scale
-        x += self.output_mean
+        #x *= self.output_scale
+        #x += self.output_mean
 
         # since our output is non-negative, we can apply RELU
         x = F.relu(x) * mix
@@ -266,7 +266,7 @@ class Separator(nn.Module):
 
         # initializing spectrograms variable
         spectrograms = torch.zeros(X.shape + (nb_sources,), dtype=audio.dtype, device=X.device)
-
+        start = time.time()
         for j, (target_name, target_module) in enumerate(self.target_models.items()):
             # apply current model to get the source spectrogram
             target_spectrogram = target_module(X.detach().clone())
@@ -308,16 +308,19 @@ class Separator(nn.Module):
                 targets_stft[sample, cur_frame] = wiener(
                     spectrograms[sample, cur_frame],
                     mix_stft[sample, cur_frame],
-                    self.niter,
+                    iterations=0,
                     softmask=self.softmask,
                     residual=self.residual,
                 )
+
 
         # getting to (nb_samples, nb_targets, channel, fft_size, n_frames, 2)
         targets_stft = targets_stft.permute(0, 5, 3, 2, 1, 4).contiguous()
 
         # inverse STFT
         estimates = self.istft(targets_stft, length=audio.shape[2])
+        end = time.time()
+        print(end - start)
 
         return estimates
 

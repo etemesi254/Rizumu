@@ -45,7 +45,7 @@ def rizumu_train(cfg: DictConfig):
     # mps accelerator generates,nan seems like a pytorch issue
     # see https://discuss.pytorch.org/t/device-mps-is-producing-nan-weights-in-nn-embedding/159067
     trainer = pl.Trainer(max_epochs=model_config["num_epochs"], log_every_n_steps=2,
-                         callbacks=[checkpoint_callback], accelerator="cpu")
+                         callbacks=[checkpoint_callback], )
 
     if model_config["checkpoint"]:
         # load the checkpoint path and resume training
@@ -77,7 +77,7 @@ def rizumu_train_oldschool(cfg: DictConfig):
     else:
         model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=7)})
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps")
     model = model.to(device, non_blocking=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     model.train()

@@ -9,3 +9,4 @@ tensorboard==2.18.0
 torchaudio~=2.5.1
 numpy~=2.1.3
 tqdm==4.67.0
+norbert==0.2.1

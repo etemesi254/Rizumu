@@ -1,8 +1,10 @@
-from typing import List
+from typing import List, Any
 
 import torch
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import functional as F
+
+from rizumu.filtering import wiener
 
 
 class RSTFT(nn.Module):
@@ -21,7 +23,7 @@ class RSTFT(nn.Module):
             self.window = self.window.to(x.device)
 
         window_length = self.win_length if self.win_length is not None else (self.n_fft // 2) + 1
-
+        previous_device = x.device
         if x.shape[-1] < window_length:
             raise Exception(f"Too small sample to apply stft, sample must be greater than {window_length}")
         stft = torch.stft(x, n_fft=self.n_fft,
@@ -30,7 +32,7 @@ class RSTFT(nn.Module):
                           hop_length=self.hop_length,
                           return_complex=True)
 
-        return stft
+        return stft.to(previous_device)
 
 
 class RISTFT(nn.Module):
@@ -44,6 +46,7 @@ class RISTFT(nn.Module):
         self.window = torch.hann_window(self.n_fft).to("cpu")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        previous_device = x.device
         if x.device != self.window.device:
             x = x.to(self.window.device)
 
@@ -53,7 +56,7 @@ class RISTFT(nn.Module):
                            hop_length=self.hop_length,
                            length=self.length
                            )
-        return stft
+        return stft.to(previous_device)
 
 
 class BLSTM(nn.Module):
@@ -72,34 +75,44 @@ class BLSTM(nn.Module):
         return x
 
 
+class TorchWiener(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return wiener(x, y)
+
+
 class SingleEncoder(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int):
         super(SingleEncoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
 
-        self.l1 = nn.Conv1d(self.input_size, self.hidden_size, 1)
-        self.ls = nn.ReLU()
-        self.c1 = nn.Conv1d(hidden_size, output_size, 1)
-        self.bc1 = nn.BatchNorm1d(output_size)
+        self.l1 = nn.Linear(self.input_size, self.hidden_size, bias=False)
+        self.bc1 = nn.BatchNorm1d(self.hidden_size)
+        self.l2 = nn.Linear(hidden_size, output_size, bias=False)
+        self.bc2 = nn.BatchNorm1d(output_size)
         self.tan1 = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         xd = torch.min(x)
         if xd.isnan().any():
-            raise Exception(f"xd is nan")
+            raise Exception(f"xd is nan,\n{x}")
         # permute to have n-bins as final, and nb_frames as second last
-        rx_a = x.permute(0, 2, 1)
-        rx_b = self.l1(rx_a)
-
-        rx_c = self.c1(rx_b)
-
-        rx_d = self.bc1(rx_c)
-        # rx = self.tan1(rx)
-        rx_e = rx_d.permute(0, 2, 1)
-        if torch.isnan(self.l1.bias).any():
-            raise Exception("nan found")
-        return rx_e
+        x = self.l1(x)
+        x = x.permute(0, 2, 1)
+        x = self.bc1(x)
+        x = x.permute(0, 2, 1)
+        x = self.l2(x)
+        x = x.permute(0, 2, 1)
+        x = self.bc2(x)
+        x = x.permute(0, 2, 1)
+        # limit between -1 and 1
+        x = self.tan1(x)
+        # if torch.isnan(self.l1.bias).any():
+        #     raise Exception("nan found")
+        return x
 
 
 class SingleDecoder(nn.Module):
@@ -109,22 +122,25 @@ class SingleDecoder(nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
 
-        self.tan1 = nn.Tanh()
-        self.bc1 = nn.BatchNorm1d(input_size)
-        self.c1 = nn.ConvTranspose1d(input_size, hidden_size, 1)
-        self.ls = nn.ReLU()
-        self.l1 = nn.ConvTranspose1d(hidden_size, output_size, 1)
+        self.l1 = nn.Linear(input_size, hidden_size, bias=False)
+        self.bc1 = nn.BatchNorm1d(hidden_size)
+        self.l2 = nn.Linear(hidden_size, output_size, bias=False)
+        self.bc2 = nn.BatchNorm1d(output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        rx = x.permute(0, 2, 1)
-        rx = self.tan1(rx)
-        rx = self.bc1(rx)
+        # x = x.permute(0, 2, 1)
+        # x = self.bc1(x)
+        # x = x.permute(0, 2, 1)
+        x = self.l1(x)
+        x = x.permute(0, 2, 1)
+        x = self.bc1(x)
+        x = x.permute(0, 2, 1)
+        x = self.l2(x)
+        x = x.permute(0, 2, 1)
+        x = self.bc2(x)
+        x = x.permute(0, 2, 1)
 
-        rx = self.c1(rx)
-        rx = self.ls(rx)
-        rx = self.l1(rx)
-        rx = rx.permute(0, 2, 1)
-        return rx
+        return x
 
 
 class RizumuModel(nn.Module):
@@ -132,7 +148,7 @@ class RizumuModel(nn.Module):
     def __init__(self, n_fft=4096,
                  hidden_size: int = 512,
                  real_layers: int = 3,
-                 imag_layers: int = 2):
+                 imag_layers: int = 2, weiner: bool = True):
         super(RizumuModel, self).__init__()
 
         # first layer is an stft layer to convert the waveform to stft
@@ -143,6 +159,9 @@ class RizumuModel(nn.Module):
         self.real_layers = real_layers
 
         self.hidden_size = hidden_size
+        # self.weiner = weiner
+        # self.weiner_fn = TorchWiener()
+        # self.weiner_fn.requires_grad_(False)
 
         hs_half = hidden_size // 2
         hs_quarter = hidden_size // 4
@@ -181,9 +200,18 @@ class RizumuModel(nn.Module):
         # reverse outputs
         outputs.reverse()
         for arr, decoder in zip(outputs, decoders):
-            x = decoder(arr*x)
+            x = decoder(arr * x)
 
         return x * y
+
+    def normalize(self, x: torch.Tensor) -> tuple[Tensor | Any, Tensor, Tensor]:
+        mean, std = torch.mean(x), torch.std(x),
+        t = (x - mean) / std
+        return t, mean, std
+
+    def denormalize(self, x: Tensor, mean: torch.Tensor, std: torch.Tensor) -> Tensor:
+        t = (x * std) + mean
+        return t
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -194,8 +222,14 @@ class RizumuModel(nn.Module):
         """
         # I will refer to (n_fft/2+1) as nb_frames
         initial_size = x.shape[-1]
+        if torch.isnan(x).any():
+            raise Exception(f"x is nan")
         # compute stft of the batch
         x = self.stft(x)
+
+        if torch.isnan(x).any():
+            raise Exception("nan found")
+        stft_mix = x
         # at this point we have the following dimensions
         # (n_channels,nb_frames,n_bins)
         # convert to real tensor, adds a dimension to x to separate real and imaginary
@@ -205,39 +239,29 @@ class RizumuModel(nn.Module):
 
         # separate real and imaginary
         # new dimensions are (n_channels,n_bins,nb_frames)
-        real = x[0:1].squeeze(dim=0)
-        imag = x[1:2].squeeze(dim=0)
+        real, imag = torch.split(x, 1, dim=0)
 
-        inv_real_max = 1. / (real.max() + 1e-8)
-        inv_imag_max = 1. / (imag.max() + 1e-8)
-
-        real_max = 1.0 / inv_real_max
-        imag_max = 1.0 / inv_imag_max
+        real = real.squeeze(dim=0)
+        imag = imag.squeeze(dim=0)
+        r_norm, r_mean, r_std = self.normalize(real)
+        i_norm, i_mean, i_std = self.normalize(imag)
 
         # normalize
-        real = real * inv_real_max
-        imag = imag * inv_imag_max
+        real = r_norm
+        imag = i_norm
 
-        # # encode the real and imaginary parts
-        # rx_1 = self.real_encoder(real)
-        # # encode one layer
-        #
-        # ix_1 = self.imag_encoder(imag)
-        # # bottleneck
-        # ix_1 = self.imag_bottleneck(ix)
-        # rx_1 = self.real_bottleneck(rx)
-
-        # decode and unnormalize
+        # decode and un-normalize
         # multiply by real to act as a mask, making it look
         # like a skip connection
-        ix_2 = self.pxe(imag, [self.ie1, self.ie2], self.imag_bottleneck, [self.id1, self.id2])
-        rx_2 = self.pxe(real, [self.re1, self.re2], self.real_bottleneck, [self.rd1, self.rd2])
+        imag = self.pxe(imag, [self.ie1, self.ie2], self.imag_bottleneck, [self.id1, self.id2])
+        real = self.pxe(real, [self.re1, self.re2], self.real_bottleneck, [self.rd1, self.rd2])
 
+        real = self.denormalize(real.unsqueeze(-1), r_mean, r_std)
+        imag = self.denormalize(imag.unsqueeze(-1), i_mean, i_std)
         # combine the real and imaginary layers back
         # add a new dimension we lost from the  squeeze and then join them on that layer
         # and squeeze them again
-        x = torch.cat((rx_2.unsqueeze(-1) * real_max,
-                       ix_2.unsqueeze(-1) * imag_max), -1)
+        x = torch.cat((real, imag), -1)
         x = torch.view_as_complex(x)
 
         if len(x.shape) == 2:
@@ -246,23 +270,40 @@ class RizumuModel(nn.Module):
             x = x.unsqueeze(0)
 
         x = x.permute(0, 2, 1)
+        # if self.weiner:
+        #     # spectogram is 3d, so add a 4d
+        #
+        #     p: torch.Tensor = x.clone().unsqueeze(-1)
+        #     # permute to arrange to a weiner style
+        #     p = p.permute(1, 2, 0, 3)
+        #     stft_mix = stft_mix.permute(1, 2, 0)
+        #
+        #     p = self.weiner_fn(x, stft_mix)
+        #     p = x.permute(3, 2, 0, 1)
+        #     p = x.squeeze(dim=0)
+        #     return p
+
         # compute istft
         self.istft.length = initial_size
-        # de normalize
+
+        # # de normalize
         x = self.istft(x)
+        if x.device == torch.device('mps'):
+            torch.mps.empty_cache()
+
         return x
 
 
 if __name__ == '__main__':
-    import torchinfo
+    with torch.autograd.set_detect_anomaly(True):
+        model = RizumuModel(n_fft=4096)
+        input = torch.randn(2, 199000)
 
-    model = RizumuModel(n_fft=4096)
-    input = torch.randn(1, 199000)
+        print(input.max())
+        # torchinfo.summary(model, input_data=input)
 
-    torchinfo.summary(model, input_data=input)
+        output: torch.Tensor = model(input)
+        loss = F.mse_loss(output, input, reduction='mean')
 
-    output: torch.Tensor = model(input)
-    loss = F.mse_loss(output, input, reduction='mean')
-
-    print(loss.item())
-    loss.backward()
+        print(loss.item())
+        #loss.backward()
