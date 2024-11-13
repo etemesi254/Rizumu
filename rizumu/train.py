@@ -77,7 +77,7 @@ def rizumu_train_oldschool(cfg: DictConfig):
     else:
         model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=7)})
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "mps")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device, non_blocking=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     model.train()
@@ -99,6 +99,9 @@ def rizumu_train_oldschool(cfg: DictConfig):
                 expected = model(mix)
                 expected = expected.to(device, non_blocking=False)
                 loss = torch.nn.functional.mse_loss(expected, speech)
+                if torch.isnan(loss):
+                    print("NaN loss")
+                    raise  Exception()
 
                 sum_loss += loss.item()
                 sum_sdr += calculate_sdr(expected, speech)

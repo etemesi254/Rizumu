@@ -4,7 +4,7 @@ import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from rizumu.filtering import wiener
+norm_bias = 1e-8
 
 
 class RSTFT(nn.Module):
@@ -75,14 +75,6 @@ class BLSTM(nn.Module):
         return x
 
 
-class TorchWiener(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        return wiener(x, y)
-
-
 class SingleEncoder(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int):
         super(SingleEncoder, self).__init__()
@@ -97,19 +89,30 @@ class SingleEncoder(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         xd = torch.min(x)
+        c = x
         if xd.isnan().any():
             raise Exception(f"xd is nan,\n{x}")
         # permute to have n-bins as final, and nb_frames as second last
         x = self.l1(x)
+        if x.isnan().any():
+            raise Exception(f"x is nan,\n{x}")
         x = x.permute(0, 2, 1)
         x = self.bc1(x)
+        if x.isnan().any():
+            raise Exception(f"x is nan,\n{x}")
         x = x.permute(0, 2, 1)
         x = self.l2(x)
+        if x.isnan().any():
+            raise Exception(f"x is nan,\n{x}")
         x = x.permute(0, 2, 1)
         x = self.bc2(x)
+        if x.isnan().any():
+            raise Exception(f"x is nan,\n{x}")
         x = x.permute(0, 2, 1)
         # limit between -1 and 1
         x = self.tan1(x)
+        if x.isnan().any():
+            raise Exception(f"x is nan,\n{x}")
         # if torch.isnan(self.l1.bias).any():
         #     raise Exception("nan found")
         return x
@@ -143,10 +146,37 @@ class SingleDecoder(nn.Module):
         return x
 
 
+def denormalize(x: Tensor, mean: torch.Tensor, std: torch.Tensor) -> Tensor:
+    t = (x * (std - norm_bias)) + mean
+    return t
+
+
+def normalize(x: torch.Tensor) -> tuple[Tensor | Any, Tensor, Tensor]:
+    mean, std = torch.mean(x), (torch.std(x) + norm_bias),
+    t = (x - mean) / std
+    return t, mean, std
+
+
+def pxe(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
+        decoders: [nn.Module]) -> torch.Tensor:
+    y = x
+    outputs: List[torch.Tensor] = []
+    for encoder in encoders:
+        x = encoder(x)
+        outputs.append(x)
+    x = bottleneck(x)
+    # reverse outputs
+    outputs.reverse()
+    for arr, decoder in zip(outputs, decoders):
+        x = decoder(x * arr)
+
+    return x * y
+
+
 class RizumuModel(nn.Module):
 
     def __init__(self, n_fft=4096,
-                 hidden_size: int = 512,
+                 hidden_size: int = 256,
                  real_layers: int = 3,
                  imag_layers: int = 2, weiner: bool = True):
         super(RizumuModel, self).__init__()
@@ -189,30 +219,6 @@ class RizumuModel(nn.Module):
 
         self.istft = RISTFT(n_fft=n_fft)
 
-    def pxe(self, x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
-            decoders: [nn.Module]) -> torch.Tensor:
-        y = x
-        outputs: List[torch.Tensor] = []
-        for encoder in encoders:
-            x = encoder(x)
-            outputs.append(x)
-        x = bottleneck(x)
-        # reverse outputs
-        outputs.reverse()
-        for arr, decoder in zip(outputs, decoders):
-            x = decoder(arr * x)
-
-        return x * y
-
-    def normalize(self, x: torch.Tensor) -> tuple[Tensor | Any, Tensor, Tensor]:
-        mean, std = torch.mean(x), torch.std(x),
-        t = (x - mean) / std
-        return t, mean, std
-
-    def denormalize(self, x: Tensor, mean: torch.Tensor, std: torch.Tensor) -> Tensor:
-        t = (x * std) + mean
-        return t
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
 
@@ -243,8 +249,8 @@ class RizumuModel(nn.Module):
 
         real = real.squeeze(dim=0)
         imag = imag.squeeze(dim=0)
-        r_norm, r_mean, r_std = self.normalize(real)
-        i_norm, i_mean, i_std = self.normalize(imag)
+        r_norm, r_mean, r_std = normalize(real)
+        i_norm, i_mean, i_std = normalize(imag)
 
         # normalize
         real = r_norm
@@ -253,11 +259,11 @@ class RizumuModel(nn.Module):
         # decode and un-normalize
         # multiply by real to act as a mask, making it look
         # like a skip connection
-        imag = self.pxe(imag, [self.ie1, self.ie2], self.imag_bottleneck, [self.id1, self.id2])
-        real = self.pxe(real, [self.re1, self.re2], self.real_bottleneck, [self.rd1, self.rd2])
+        imag = pxe(imag, [self.ie1, self.ie2], self.imag_bottleneck, [self.id1, self.id2])
+        real = pxe(real, [self.re1, self.re2], self.real_bottleneck, [self.rd1, self.rd2])
 
-        real = self.denormalize(real.unsqueeze(-1), r_mean, r_std)
-        imag = self.denormalize(imag.unsqueeze(-1), i_mean, i_std)
+        real = denormalize(real.unsqueeze(-1), r_mean, r_std)
+        imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
         # combine the real and imaginary layers back
         # add a new dimension we lost from the  squeeze and then join them on that layer
         # and squeeze them again
@@ -290,20 +296,23 @@ class RizumuModel(nn.Module):
         x = self.istft(x)
         if x.device == torch.device('mps'):
             torch.mps.empty_cache()
+        if torch.isnan(x).any():
+            raise Exception("nan found")
 
         return x
 
 
 if __name__ == '__main__':
+    import torchinfo
+
     with torch.autograd.set_detect_anomaly(True):
         model = RizumuModel(n_fft=4096)
-        input = torch.randn(2, 199000)
+        input = torch.zeros((2, 199000))
 
-        print(input.max())
-        # torchinfo.summary(model, input_data=input)
+        torchinfo.summary(model, input_data=input)
 
         output: torch.Tensor = model(input)
         loss = F.mse_loss(output, input, reduction='mean')
 
         print(loss.item())
-        #loss.backward()
+        # loss.backward()
