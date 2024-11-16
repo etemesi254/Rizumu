@@ -4,8 +4,6 @@ import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from rizumu.filtering import wiener
-
 norm_bias = 1e-8
 
 
@@ -78,11 +76,11 @@ class BLSTM(nn.Module):
 
 
 class SingleEncoder(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, output_size: int):
+    def __init__(self, input_size: int, hidden_size: int, output_size: int, activate: bool = True):
         super(SingleEncoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-
+        self.activate = activate
         self.l1 = nn.Linear(self.input_size, self.hidden_size, bias=False)
         self.bc1 = nn.BatchNorm1d(self.hidden_size)
         self.l2 = nn.Linear(hidden_size, output_size, bias=False)
@@ -90,33 +88,18 @@ class SingleEncoder(nn.Module):
         self.tan1 = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        xd = torch.min(x)
-        c = x
-        if xd.isnan().any():
-            raise Exception(f"xd is nan,\n{x}")
         # permute to have n-bins as final, and nb_frames as second last
         x = self.l1(x)
-        if x.isnan().any():
-            raise Exception(f"x is nan,\n{x}")
         x = x.permute(0, 2, 1)
         x = self.bc1(x)
-        if x.isnan().any():
-            raise Exception(f"x is nan,\n{x}")
         x = x.permute(0, 2, 1)
         x = self.l2(x)
-        if x.isnan().any():
-            raise Exception(f"x is nan,\n{x}")
         x = x.permute(0, 2, 1)
         x = self.bc2(x)
-        if x.isnan().any():
-            raise Exception(f"x is nan,\n{x}")
         x = x.permute(0, 2, 1)
         # limit between -1 and 1
-        x = self.tan1(x)
-        if x.isnan().any():
-            raise Exception(f"x is nan,\n{x}")
-        # if torch.isnan(self.l1.bias).any():
-        #     raise Exception("nan found")
+        if self.activate:
+            x = self.tan1(x)
         return x
 
 
@@ -133,9 +116,6 @@ class SingleDecoder(nn.Module):
         self.bc2 = nn.BatchNorm1d(output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x = x.permute(0, 2, 1)
-        # x = self.bc1(x)
-        # x = x.permute(0, 2, 1)
         x = self.l1(x)
         x = x.permute(0, 2, 1)
         x = self.bc1(x)
@@ -177,15 +157,16 @@ def pxe(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
 
 class RizumuModel(nn.Module):
 
-    def __init__(self, n_fft=4096,
-                 hidden_size: int = 1024,
-                 real_layers: int = 5,
-                 imag_layers: int = 5, weiner: bool = True):
+    def __init__(self, n_fft: int = 4096,
+                 hidden_size: int = 512,
+                 real_layers: int = 4,
+                 imag_layers: int = 4,
+                 weiner: bool = True):
         super(RizumuModel, self).__init__()
 
         # first layer is an stft layer to convert the waveform to stft
         self.stft = RSTFT(n_fft=n_fft)
-        last_param = (n_fft // 2 + 1)
+        last_param = (n_fft // 2) + 1
         self.last_param = last_param
         self.imag_layers = imag_layers
         self.real_layers = real_layers
@@ -198,11 +179,11 @@ class RizumuModel(nn.Module):
         hs_quarter = hidden_size // 4
 
         # down u-net
-        self.re1 = SingleEncoder(last_param, hidden_size, hs_half)
-        self.re2 = SingleEncoder(hs_half, hidden_size, hs_quarter)
+        self.re1 = SingleEncoder(last_param, hidden_size, hs_half, activate=True)
+        self.re2 = SingleEncoder(hs_half, hidden_size, hs_quarter, activate=True)
 
-        self.ie1 = SingleEncoder(last_param, hidden_size, hs_half)
-        self.ie2 = SingleEncoder(hs_half, hidden_size, hs_quarter)
+        self.ie1 = SingleEncoder(last_param, hidden_size, hs_half, activate=True)
+        self.ie2 = SingleEncoder(hs_half, hidden_size, hs_quarter, activate=True)
 
         # bottleneck
         self.real_bottleneck = BLSTM(hs_quarter, layers=self.real_layers, skip=True)
@@ -234,8 +215,8 @@ class RizumuModel(nn.Module):
         # compute stft of the batch
         x = self.stft(x)
 
-        if torch.isnan(x).any():
-            raise Exception("nan found")
+        # if torch.isnan(x).any():
+        #     raise Exception("nan found")
         stft_mix = x
         # at this point we have the following dimensions
         # (n_channels,nb_frames,n_bins)
@@ -296,8 +277,6 @@ class RizumuModel(nn.Module):
         x = self.istft(x)
         if x.device == torch.device('mps'):
             torch.mps.empty_cache()
-        if torch.isnan(x).any():
-            raise Exception("nan found")
 
         return x
 

@@ -7,6 +7,8 @@ from torch.optim import Adam
 
 from rizumu.model import RizumuModel
 
+loss_constant = 1000
+
 
 def calculate_loss(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     """
@@ -68,10 +70,10 @@ class RizumuLightning(pl.LightningModule):
                  labels: List[str],
                  output_label_name: str,
                  mix_name: str,
-                 n_fft: int = 2048,
+                 n_fft: int = 4096,
                  hidden_size: int = 512,
-                 real_layers: int = 3,
-                 imag_layers: int = 2):
+                 real_layers: int = 4,
+                 imag_layers: int = 4):
         assert mix_name in labels, "Mix is not in labels please include it"
         assert output_label_name in labels, "Output label is not in labels please include it"
 
@@ -79,6 +81,7 @@ class RizumuLightning(pl.LightningModule):
 
         self.save_hyperparameters()
         self.model = RizumuModel(n_fft=n_fft, hidden_size=hidden_size, real_layers=real_layers, imag_layers=imag_layers)
+        self.count = 0
         self.optimizer = Adam(self.model.parameters(), lr=1e-3)
         self.labels = labels
         self.output_label_name = output_label_name
@@ -108,12 +111,12 @@ class RizumuLightning(pl.LightningModule):
 
         loss = calculate_loss(output_istft, speech_istft)
         sdr = calculate_sdr(output_istft, speech_istft)
-        snr = calculate_snr(output_istft, speech_istft)
+        new_loss = (100 - sdr) * loss
 
-        self.log(f"{prefix}_loss", loss, prog_bar=True)
+        self.log(f"{prefix}_loss", new_loss, prog_bar=True)
         self.log(f"{prefix}_sdr", sdr, prog_bar=True)
-        self.log(f"{prefix}_snr", snr, prog_bar=True)
-        return loss
+        # modify loss to be sdr * loss
+        return new_loss
 
     def training_step(self, batch: List[torch.Tensor], batch_idx):
         # from our batch  place labels with
@@ -128,6 +131,7 @@ class RizumuLightning(pl.LightningModule):
         return self.optimizer
 
     def validation_step(self, validation_batch, batch_idx):
+        self.count = 0
         # from our batch  place labels with
         mix_input, expected_output = self.get_batch(validation_batch)
 
@@ -136,6 +140,3 @@ class RizumuLightning(pl.LightningModule):
         if self.device == "mps":
             torch.mps.synchronize()
         return self.calculate_properties(output, expected_output, prefix="val")
-
-
-
