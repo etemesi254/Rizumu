@@ -101,6 +101,7 @@ class BandTransformerModelModule(nn.Module):
 
 
 if __name__ == '__main__':
+    import torchinfo
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     batch_size, k_subbands, t_timesteps, input_dim = 4, 41, 259, 128
@@ -113,9 +114,9 @@ if __name__ == '__main__':
     }
     model = BandTransformerModelModule(**cfg).to(device)
     _ = model.eval()
-
-    with torch.no_grad():
-        out_features = model(in_features)
-
-    print(f"In: {in_features.shape}\nOut: {out_features.shape}")
-    print(f"Total number of parameters: {sum([p.numel() for p in model.parameters()])}")
+    torchinfo.summary(model, input_data=in_features)
+    # with torch.no_grad():
+    #     out_features = model(in_features)
+    #
+    # print(f"In: {in_features.shape}\nOut: {out_features.shape}")
+    # print(f"Total number of parameters: {sum([p.numel() for p in model.parameters()])}")

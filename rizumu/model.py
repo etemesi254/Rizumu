@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import List, Any
 
 import torch
@@ -5,6 +6,11 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 
 norm_bias = 1e-8
+
+
+class ModelType(Enum):
+    Linear = 1
+    Convolutional = 2
 
 
 class RSTFT(nn.Module):
@@ -25,8 +31,9 @@ class RSTFT(nn.Module):
         window_length = self.win_length if self.win_length is not None else (self.n_fft // 2) + 1
         previous_device = x.device
         if x.shape[-1] < window_length:
-            raise Exception(f"Too small sample to apply stft, sample must be greater than {window_length}")
-        stft = torch.stft(x, n_fft=self.n_fft,
+            x = torch.nn.functional.pad(x, (0, window_length - x.shape[-1]))
+        stft = torch.stft(x,
+                          n_fft=self.n_fft,
                           win_length=self.win_length,
                           window=self.window,
                           hop_length=self.hop_length,
@@ -76,26 +83,32 @@ class BLSTM(nn.Module):
 
 
 class SingleEncoder(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, output_size: int, activate: bool = True):
+    def __init__(self, input_size: int, hidden_size: int, output_size: int,
+                 activate: bool = True):
         super(SingleEncoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.activate = activate
-        self.l1 = nn.Linear(self.input_size, self.hidden_size, bias=False)
+        self.output_size = output_size
+
+        self.l1 = nn.Linear(self.input_size, self.hidden_size, bias=True)
         self.bc1 = nn.BatchNorm1d(self.hidden_size)
-        self.l2 = nn.Linear(hidden_size, output_size, bias=False)
+        self.l2 = nn.Linear(hidden_size, output_size, bias=True)
         self.bc2 = nn.BatchNorm1d(output_size)
         self.tan1 = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # permute to have n-bins as final, and nb_frames as second last
         x = self.l1(x)
+        x = F.relu(x)
         x = x.permute(0, 2, 1)
         x = self.bc1(x)
+        x = F.relu(x)
         x = x.permute(0, 2, 1)
         x = self.l2(x)
+        x = F.relu(x)
         x = x.permute(0, 2, 1)
         x = self.bc2(x)
+        x = F.relu(x)
         x = x.permute(0, 2, 1)
         # limit between -1 and 1
         if self.activate:
@@ -110,21 +123,25 @@ class SingleDecoder(nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
 
-        self.l1 = nn.Linear(input_size, hidden_size, bias=False)
+        self.l1 = nn.Linear(input_size, hidden_size, bias=True)
         self.bc1 = nn.BatchNorm1d(hidden_size)
-        self.l2 = nn.Linear(hidden_size, output_size, bias=False)
+        self.l2 = nn.Linear(hidden_size, output_size, bias=True)
         self.bc2 = nn.BatchNorm1d(output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.l1(x)
         x = x.permute(0, 2, 1)
+        x = F.relu(x)
         x = self.bc1(x)
+        x = F.relu(x)
         x = x.permute(0, 2, 1)
         x = self.l2(x)
+        x = F.relu(x)
         x = x.permute(0, 2, 1)
         x = self.bc2(x)
+        x = F.relu(x)
         x = x.permute(0, 2, 1)
-
+        x = F.relu(x)
         return x
 
 
@@ -189,10 +206,6 @@ class RizumuModel(nn.Module):
         self.real_bottleneck = BLSTM(hs_quarter, layers=self.real_layers, skip=True)
         self.imag_bottleneck = BLSTM(hs_quarter, layers=self.imag_layers, skip=True)
 
-        # up u-net
-        self.real_decoder = nn.Sequential(SingleDecoder(hs_quarter, hidden_size, hs_half),
-                                          SingleDecoder(hs_half, hidden_size, last_param))
-
         self.rd1 = SingleDecoder(hs_quarter, hidden_size, hs_half)
         self.rd2 = SingleDecoder(hs_half, hidden_size, last_param)
 
@@ -209,15 +222,11 @@ class RizumuModel(nn.Module):
         :return: Output tensor of shape (channels,channel_data) size will match the input tensor
         """
         # I will refer to (n_fft/2+1) as nb_frames
+        original = x
         initial_size = x.shape[-1]
-        if torch.isnan(x).any():
-            raise Exception(f"x is nan")
         # compute stft of the batch
         x = self.stft(x)
 
-        # if torch.isnan(x).any():
-        #     raise Exception("nan found")
-        stft_mix = x
         # at this point we have the following dimensions
         # (n_channels,nb_frames,n_bins)
         # convert to real tensor, adds a dimension to x to separate real and imaginary
@@ -231,6 +240,7 @@ class RizumuModel(nn.Module):
 
         real = real.squeeze(dim=0)
         imag = imag.squeeze(dim=0)
+        # normalize
         r_norm, r_mean, r_std = normalize(real)
         i_norm, i_mean, i_std = normalize(imag)
 
@@ -258,18 +268,6 @@ class RizumuModel(nn.Module):
             x = x.unsqueeze(0)
 
         x = x.permute(0, 2, 1)
-        # if self.weiner:
-        #     # spectogram is 3d, so add a 4d
-        #
-        #     x: torch.Tensor = x.unsqueeze(-1)
-        #     # permute to arrange to a weiner style
-        #     x = x.permute(1, 2, 0, 3)
-        #     stft_mix = stft_mix.permute(1, 2, 0)
-        #
-        #     x = wiener(x, stft_mix, iterations=0)
-        #     x = x.permute(3, 2, 0, 1)
-        #     x = x.squeeze(dim=0)
-
         # compute istft
         self.istft.length = initial_size
 
@@ -285,8 +283,8 @@ if __name__ == '__main__':
     import torchinfo
 
     with torch.autograd.set_detect_anomaly(True):
-        model = RizumuModel(n_fft=4096)
-        input = torch.zeros((2, 199000))
+        model = RizumuModel(n_fft=2048)
+        input = torch.randn((2, 19090))
 
         torchinfo.summary(model, input_data=input)
 

@@ -106,7 +106,7 @@ class BandSplitRNN(nn.Module):
     def forward(self, x: torch.Tensor):
         """
         Input and output are T-F complex-valued features.
-        Input shape: batch_size, n_channels, freq, time]
+        Input shape: [batch_size, n_channels, freq, time]
         Output shape: batch_size, n_channels, freq, time]
         """
         # use only magnitude if not using complex input

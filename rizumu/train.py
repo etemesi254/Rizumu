@@ -77,7 +77,7 @@ def rizumu_train_oldschool(cfg: DictConfig):
     else:
         model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=7)})
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "mps")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device, non_blocking=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     model.train()
@@ -86,6 +86,7 @@ def rizumu_train_oldschool(cfg: DictConfig):
             sum_sdr = 0
             sum_loss = 0
             iteration = 0
+
 
             pbar = tqdm(total=len(dnr_train))
 
@@ -101,15 +102,20 @@ def rizumu_train_oldschool(cfg: DictConfig):
                 loss = torch.nn.functional.mse_loss(expected, speech)
                 if torch.isnan(loss):
                     print("NaN loss")
-                    raise  Exception()
+                    raise Exception()
+                sdr = calculate_sdr(expected, speech)
 
-                sum_loss += loss.item()
-                sum_sdr += calculate_sdr(expected, speech)
+                sum_sdr += sdr
                 iteration += 1
+                new_loss = loss * (100 - sdr)
+                sum_loss += new_loss
 
-                pbar.set_postfix({"sdr": sum_sdr / iteration, "loss": sum_loss / iteration})
+                avg_loss = sum_loss / iteration
 
-                loss.backward()
+
+                pbar.set_postfix({"sdr": sum_sdr / iteration, "loss": new_loss.item(), "avg_loss": avg_loss.item()})
+
+                new_loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
 
