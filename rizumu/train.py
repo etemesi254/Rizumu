@@ -40,7 +40,7 @@ def rizumu_train(cfg: DictConfig):
     checkpoint_callback = ModelCheckpoint(dirpath=model_config["log_dir"])
 
     pl_model = RizumuLightning(labels=labels, output_label_name=output_label_name,
-                               mix_name=mix_label_name)
+                               mix_name=mix_label_name,n_fft=2048)
 
     # mps accelerator generates,nan seems like a pytorch issue
     # see https://discuss.pytorch.org/t/device-mps-is-producing-nan-weights-in-nn-embedding/159067

@@ -83,9 +83,9 @@ dnr_dataset:
     dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/"
     batch_size: 1
     shuffle: true
-    num_epochs: 52
+    num_epochs: 5
     checkpoint: false
-    checkpoint_path: ""
+    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=59-step=42900.ckpt"
     log_dir: "./chekpoints/rizumu_logs"
     use_dct: False
     quantizer: 2000
