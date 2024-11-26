@@ -10,7 +10,7 @@ from tqdm import tqdm
 from openunmix.model import OpenUnmix, Separator
 from openunmix.transforms import ComplexNorm
 from rizumu.data_loader import RizumuSeparatorDataset
-from rizumu.model import RizumuModel
+from rizumu.model import RizumuModel, RizumuModelV2
 from rizumu.pl_model import RizumuLightning, calculate_sdr
 
 import time
@@ -74,12 +74,12 @@ def rizumu_train_oldschool(cfg: DictConfig):
                            persistent_workers=True, batch_size=None)
 
     if True:
-        model = RizumuModel(n_fft=2048)
+        model = RizumuModelV2(n_fft=2048)
     else:
         model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=2)})
         # model = OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=3)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps")
     model = model.to(device, non_blocking=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     model.train()
@@ -90,7 +90,6 @@ def rizumu_train_oldschool(cfg: DictConfig):
             iteration = 0
 
             pbar = tqdm(total=len(dnr_train))
-            few = ComplexNorm()
 
             for batch in dnr_train:
                 pbar.update()

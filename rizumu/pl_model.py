@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 import torch
 from torch.optim import Adam
 
-from rizumu.model import RizumuModel
+from rizumu.model import RizumuModel, RizumuModelV2
 
 loss_constant = 1000
 
@@ -71,15 +71,15 @@ class RizumuLightning(pl.LightningModule):
                  mix_name: str,
                  n_fft: int = 4096,
                  hidden_size: int = 512,
-                 real_layers: int = 4,
-                 imag_layers: int = 4):
+                 real_layers: int = 2,
+                 imag_layers: int = 2):
         assert mix_name in labels, "Mix is not in labels please include it"
         assert output_label_name in labels, "Output label is not in labels please include it"
 
         super().__init__()
 
         self.save_hyperparameters()
-        self.model = RizumuModel(n_fft=n_fft, hidden_size=hidden_size, real_layers=real_layers, imag_layers=imag_layers)
+        self.model = RizumuModelV2(n_fft=n_fft, hidden_size=hidden_size)
         self.count = 0
         self.optimizer = Adam(self.model.parameters(), lr=1e-3)
         self.labels = labels

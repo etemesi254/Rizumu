@@ -124,7 +124,7 @@ class SingleDecoder(nn.Module):
         self.bc2 = nn.BatchNorm1d(output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x= x.permute(1, 0, 2)
+        x = x.permute(1, 0, 2)
         x = self.l1(x)
         x = x.permute(0, 2, 1)
         x = self.bc1(x)
@@ -132,7 +132,7 @@ class SingleDecoder(nn.Module):
         x = self.l2(x)
         x = x.permute(0, 2, 1)
         x = self.bc2(x)
-        #x = x.permute(2, 0, 1)
+        # x = x.permute(0, 2, 1)
         if self.activate:
             x = F.relu(x)
         return x
@@ -163,7 +163,7 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
             x = decoder(x * arr)
         else:
             x = decoder(x - arr)
-    x= F.relu(x)
+    x = F.relu(x)
     return x
 
 
@@ -185,7 +185,6 @@ class RizumuBase(nn.Module):
 
         # down u-net
         self.re1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
-
         self.ie1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
 
         # bottleneck
@@ -203,8 +202,8 @@ class RizumuBase(nn.Module):
                 r_mean: torch.Tensor, r_std: torch.Tensor,
                 i_mean: torch.Tensor, i_std: torch.Tensor) -> torch.Tensor:
 
-        imag = exec_unet(imag, [self.ie1,], self.imag_bottleneck,  [self.id2], self.is_mask)
-        real = exec_unet(real, [self.re1,], self.real_bottleneck, [self.rd2], self.is_mask)
+        imag = exec_unet(imag, [self.ie1, ], self.imag_bottleneck, [self.id2], self.is_mask)
+        real = exec_unet(real, [self.re1, ], self.real_bottleneck, [self.rd2], self.is_mask)
 
         real = denormalize(real.unsqueeze(-1), r_mean, r_std)
         imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
@@ -297,12 +296,125 @@ class RizumuModel(nn.Module):
         return mx
 
 
+class RizumuBaseV2(nn.Module):
+    def __init__(self, size: int, hidden_size: int = 512, real_layers: int = 1, imag_layers: int = 1, activate=True):
+        super(RizumuBaseV2, self).__init__()
+        self.size = size
+        self.hidden_size = hidden_size
+        self.real_layers = real_layers
+        self.imag_layers = imag_layers
+        hs_half = size // 2
+        self.is_mask = True
+
+        # down u-net
+        self.re1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
+        self.ie1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
+
+        # bottleneck
+        self.real_bottleneck = BLSTM(hs_half, layers=self.real_layers, skip=True)
+        self.imag_bottleneck = BLSTM(hs_half, layers=self.imag_layers, skip=True)
+
+        self.rd2 = SingleDecoder(hs_half, hidden_size, self.size, activate)
+        self.id2 = SingleDecoder(hs_half, hidden_size, self.size, activate)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # at this point we have the following dimensions
+        # (n_channels,nb_frames,n_bins)
+        # convert to real tensor, adds a dimension to x to separate real and imaginary
+        x = torch.view_as_real(x)
+        # change to (real_imaginary,n_channels,n_bins,nb_frames)
+        x = x.permute(3, 0, 2, 1)
+
+        # separate real and imaginary
+        # new dimensions are (n_channels,n_bins,nb_frames)
+        real, imag = torch.split(x, 1, dim=0)
+
+        real = real.squeeze(dim=0)
+        imag = imag.squeeze(dim=0)
+        # normalize
+        real, r_mean, r_std = normalize(real)
+        imag, i_mean, i_std = normalize(imag)
+        # generate mask
+        mask_imag = exec_unet(imag, [self.ie1,], self.imag_bottleneck, [self.id2], self.is_mask)
+        mask_real = exec_unet(real, [self.re1,], self.real_bottleneck, [self.rd2], self.is_mask)
+
+        # the signal at this point is istft so we can multiply
+        real = real.permute(0, 2, 1)
+        imag = imag.permute(0, 2, 1)
+
+        real = real * mask_real
+        imag = imag * mask_imag
+
+        real = denormalize(real.unsqueeze(-1), r_mean, r_std)
+        imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
+
+        # convert back to complex tensor and return
+        x = torch.cat((real, imag), -1)
+        x = torch.view_as_complex(x)
+
+        return x
+
+
+class RizumuModelV2(nn.Module):
+    def __init__(self, n_fft: int = 2048, num_splits: int = 5, hidden_size: int = 512, ):
+        super(RizumuModelV2, self).__init__()
+        self.stft = RSTFT(n_fft=n_fft)
+        self.istft = RISTFT(n_fft=n_fft)
+        last_param = (n_fft // 2) + 1
+        self.last_param = last_param
+        self.num_splits = num_splits
+        self.hidden_size = hidden_size
+        split_sizes_diff = []
+        single_split = (last_param + (self.num_splits - 1)) // self.num_splits
+
+        for i in range(num_splits):
+            start = single_split * i
+            end = single_split * (i + 1)
+            end = min(end, last_param)
+            split_sizes_diff.append(end - start)
+        self.models = nn.ModuleList([])
+        for i in range(num_splits):
+            self.models.append(RizumuBaseV2(size=split_sizes_diff[i], hidden_size=self.hidden_size))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # step 1. perfom stft on the signal
+        initial_size = x.shape[-1]
+        x = self.stft(x)
+
+        # step 2, split based on configured categories
+        # x shape is (channels,n_bins,n_timesteps)
+        channels, n_bins, n_timesteps = x.shape
+        # round up division.
+        single_split = (n_bins + (self.num_splits - 1)) // self.num_splits
+
+        # step 3, collect into categories
+        input_divs = []
+        for i in range(self.num_splits):
+            input_divs.append(x[:, i * single_split:(i + 1) * single_split, :])
+
+        results = []
+        # run the models
+        for pos, i in enumerate(input_divs):
+            results.append(self.models[pos](i))
+
+        # combine the models based on the split location
+        results = torch.cat(results, dim=1)
+        self.istft.length = initial_size
+        x = self.istft(results)
+        return x
+
+
 if __name__ == '__main__':
     import torchinfo
 
+    model = RizumuModelV2()
+    input = torch.rand((1, 21203))
+    # torchinfo.summary(model, input_data=input)
+    # model(input)
+    torch.onnx.export(model,input)
     with torch.autograd.set_detect_anomaly(True):
-        model = RizumuModel(n_fft=2048)
-        input = torch.randn((2, 19090))
+        model = RizumuModelV2(n_fft=2048, num_splits=10)
+        input = torch.randn((2, 59090))
 
         torchinfo.summary(model, input_data=input)
 
