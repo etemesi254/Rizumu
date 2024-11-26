@@ -26,7 +26,6 @@ def calculate_sdr(target_tensor, output_tensor) -> float:
      Calculate the signal to distortion ratio between target and output tensor
     :param target_tensor: The true expected output
     :param output_tensor: The predicted output
-    :param n_fft: window length for istft
     :return:  The signal to distortion ratio between target and output tensor
     """
 

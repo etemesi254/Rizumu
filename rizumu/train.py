@@ -7,12 +7,13 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.utils.data import random_split, DataLoader
 from tqdm import tqdm
 
-from openunmix.model import Separator, OpenUnmix
+from openunmix.model import OpenUnmix, Separator
+from openunmix.transforms import ComplexNorm
 from rizumu.data_loader import RizumuSeparatorDataset
 from rizumu.model import RizumuModel
 from rizumu.pl_model import RizumuLightning, calculate_sdr
 
-
+import time
 def rizumu_train(cfg: DictConfig):
     model_config = cfg["dnr_dataset"]["rizumu"]
 
@@ -39,13 +40,13 @@ def rizumu_train(cfg: DictConfig):
 
     checkpoint_callback = ModelCheckpoint(dirpath=model_config["log_dir"])
 
-    pl_model = RizumuLightning(labels=labels, output_label_name=output_label_name,
-                               mix_name=mix_label_name,n_fft=2048)
+    pl_model = RizumuLightning(labels=labels, output_label_name=output_label_name, real_layers=2, imag_layers=2,
+                               mix_name=mix_label_name, n_fft=2048)
 
     # mps accelerator generates,nan seems like a pytorch issue
     # see https://discuss.pytorch.org/t/device-mps-is-producing-nan-weights-in-nn-embedding/159067
     trainer = pl.Trainer(max_epochs=model_config["num_epochs"], log_every_n_steps=2,
-                         callbacks=[checkpoint_callback], accelerator="cpu")
+                         callbacks=[checkpoint_callback])
 
     if model_config["checkpoint"]:
         # load the checkpoint path and resume training
@@ -75,7 +76,8 @@ def rizumu_train_oldschool(cfg: DictConfig):
     if True:
         model = RizumuModel(n_fft=2048)
     else:
-        model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=7)})
+        model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=2)})
+        # model = OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=3)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device, non_blocking=False)
@@ -87,8 +89,8 @@ def rizumu_train_oldschool(cfg: DictConfig):
             sum_loss = 0
             iteration = 0
 
-
             pbar = tqdm(total=len(dnr_train))
+            few = ComplexNorm()
 
             for batch in dnr_train:
                 pbar.update()
@@ -96,10 +98,9 @@ def rizumu_train_oldschool(cfg: DictConfig):
                 mix, speech = batch
                 mix = mix.to(device, non_blocking=False)
                 speech = speech.to(device, non_blocking=False)
-
                 expected = model(mix)
                 expected = expected.to(device, non_blocking=False)
-                loss = torch.nn.functional.mse_loss(expected, speech)
+                loss = torch.nn.functional.mse_loss(expected.squeeze(), speech.squeeze())
                 if torch.isnan(loss):
                     print("NaN loss")
                     raise Exception()
@@ -111,7 +112,6 @@ def rizumu_train_oldschool(cfg: DictConfig):
                 sum_loss += new_loss
 
                 avg_loss = sum_loss / iteration
-
 
                 pbar.set_postfix({"sdr": sum_sdr / iteration, "loss": new_loss.item(), "avg_loss": avg_loss.item()})
 

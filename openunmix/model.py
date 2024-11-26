@@ -1,12 +1,14 @@
 import time
+import warnings
 from typing import Optional, Mapping
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchaudio
 from torch import Tensor
-from torch.nn import LSTM, BatchNorm1d, Linear, Parameter
+from torch.nn import BatchNorm1d, Linear, Parameter
 
 if __name__ == "__main__":
     from filtering import wiener
@@ -14,6 +16,17 @@ if __name__ == "__main__":
 else:
     from .filtering import wiener
     from .transforms import make_filterbanks, ComplexNorm
+
+
+class BLSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, layers=1, skip=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lstm = nn.LSTM(bidirectional=True, num_layers=layers, hidden_size=hidden_size, input_size=input_size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.lstm(x)[0]
+
+        return x
 
 
 class OpenUnmix(nn.Module):
@@ -65,13 +78,10 @@ class OpenUnmix(nn.Module):
         else:
             lstm_hidden_size = hidden_size // 2
 
-        self.lstm = LSTM(
+        self.lstm = BLSTM(
             input_size=hidden_size,
             hidden_size=lstm_hidden_size,
-            num_layers=nb_layers,
-            bidirectional=not unidirectional,
-            batch_first=False,
-            dropout=0.4 if nb_layers > 1 else 0,
+            layers=nb_layers
         )
 
         fc2_hiddensize = hidden_size * 2
@@ -146,7 +156,7 @@ class OpenUnmix(nn.Module):
         lstm_out = self.lstm(x)
 
         # lstm skip connection
-        x = torch.cat([x, lstm_out[0]], -1)
+        x = torch.cat([x, lstm_out], -1)
 
         # first dense stage + batch norm
         x = self.fc2(x.reshape(-1, x.shape[-1]))
@@ -162,8 +172,8 @@ class OpenUnmix(nn.Module):
         x = x.reshape(nb_frames, nb_samples, nb_channels, self.nb_output_bins)
 
         # apply output scaling
-        #x *= self.output_scale
-        #x += self.output_mean
+        # x *= self.output_scale
+        # x += self.output_mean
 
         # since our output is non-negative, we can apply RELU
         x = F.relu(x) * mix
@@ -266,7 +276,6 @@ class Separator(nn.Module):
 
         # initializing spectrograms variable
         spectrograms = torch.zeros(X.shape + (nb_sources,), dtype=audio.dtype, device=X.device)
-        start = time.time()
         for j, (target_name, target_module) in enumerate(self.target_models.items()):
             # apply current model to get the source spectrogram
             target_spectrogram = target_module(X.detach().clone())
@@ -313,14 +322,12 @@ class Separator(nn.Module):
                     residual=self.residual,
                 )
 
-
         # getting to (nb_samples, nb_targets, channel, fft_size, n_frames, 2)
         targets_stft = targets_stft.permute(0, 5, 3, 2, 1, 4).contiguous()
 
         # inverse STFT
         estimates = self.istft(targets_stft, length=audio.shape[2])
         end = time.time()
-        print(end - start)
 
         return estimates
 
@@ -353,10 +360,69 @@ class Separator(nn.Module):
         return estimates_dict
 
 
+def preprocess(
+        audio: torch.Tensor,
+        rate: Optional[float] = None,
+        model_rate: Optional[float] = None,
+) -> torch.Tensor:
+    """
+    From an input tensor, convert it to a tensor of shape
+    shape=(nb_samples, nb_channels, nb_timesteps). This includes:
+    -  if input is 1D, adding the samples and channels dimensions.
+    -  if input is 2D
+        o and the smallest dimension is 1 or 2, adding the samples one.
+        o and all dimensions are > 2, assuming the smallest is the samples
+          one, and adding the channel one
+    - at the end, if the number of channels is greater than the number
+      of time steps, swap those two.
+    - resampling to target rate if necessary
+
+    Args:
+        audio (Tensor): input waveform
+        rate (float): sample rate for the audio
+        model_rate (float): sample rate for the model
+
+    Returns:
+        Tensor: [shape=(nb_samples, nb_channels=2, nb_timesteps)]
+    """
+    shape = torch.as_tensor(audio.shape, device=audio.device)
+
+    if len(shape) == 1:
+        # assuming only time dimension is provided.
+        audio = audio[None, None, ...]
+    elif len(shape) == 2:
+        if shape.min() <= 2:
+            # assuming sample dimension is missing
+            audio = audio[None, ...]
+        else:
+            # assuming channel dimension is missing
+            audio = audio[:, None, ...]
+    if audio.shape[1] > audio.shape[2]:
+        # swapping channel and time
+        audio = audio.transpose(1, 2)
+    if audio.shape[1] > 2:
+        warnings.warn("Channel count > 2!. Only the first two channels " "will be processed!")
+        audio = audio[..., :2]
+
+    if audio.shape[1] == 1:
+        # if we have mono, we duplicate it to get stereo
+        audio = torch.repeat_interleave(audio, 2, dim=1)
+
+    if rate != model_rate:
+        warnings.warn("resample to model sample rate")
+        # we have to resample to model samplerate if needed
+        # this makes sure we resample input only once
+        resampler = torchaudio.transforms.Resample(
+            orig_freq=rate, new_freq=model_rate, resampling_method="sinc_interpolation"
+        ).to(audio.device)
+        audio = resampler(audio)
+    return audio
+
+
 if __name__ == "__main__":
     import torchinfo
-    separator = Separator(target_models={"speech": OpenUnmix(nb_bins=2049,nb_channels=1,nb_layers=7)})
-    torchinfo.summary(separator)
 
+    separator = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=7)})
+    torchinfo.summary(separator)
 
     pass

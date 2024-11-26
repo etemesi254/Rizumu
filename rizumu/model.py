@@ -74,12 +74,9 @@ class BLSTM(nn.Module):
         self.skip = skip
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        y = x
         x = self.lstm(x)[0]
         x = self.linear(x)
-        if self.skip:
-            x = x + y
-        x = F.relu(x)
+
         return x
 
 
@@ -106,8 +103,8 @@ class SingleEncoder(nn.Module):
         x = self.l2(x)
         x = x.permute(0, 2, 1)
         x = self.bc2(x)
-        x = x.permute(0, 2, 1)
-        # limit between -1 and 1
+        x = x.permute(2, 0, 1)
+        # # limit between -1 and 1
         if self.activate:
             x = self.tan1(x)
         return x
@@ -127,18 +124,15 @@ class SingleDecoder(nn.Module):
         self.bc2 = nn.BatchNorm1d(output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x= x.permute(1, 0, 2)
         x = self.l1(x)
         x = x.permute(0, 2, 1)
-        if self.activate:
-            x = F.relu(x)
         x = self.bc1(x)
         x = x.permute(0, 2, 1)
         x = self.l2(x)
-        if self.activate:
-            x = F.relu(x)
         x = x.permute(0, 2, 1)
         x = self.bc2(x)
-        x = x.permute(0, 2, 1)
+        #x = x.permute(2, 0, 1)
         if self.activate:
             x = F.relu(x)
         return x
@@ -156,7 +150,7 @@ def normalize(x: torch.Tensor) -> tuple[Tensor, Tensor, Tensor]:
 
 
 def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
-              decoders: [nn.Module]) -> torch.Tensor:
+              decoders: [nn.Module], is_mask: bool) -> torch.Tensor:
     outputs: List[torch.Tensor] = []
     for encoder in encoders:
         x = encoder(x)
@@ -165,37 +159,42 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
     # reverse outputs
     outputs.reverse()
     for arr, decoder in zip(outputs, decoders):
-        x = decoder(x - arr)
+        if is_mask:
+            x = decoder(x * arr)
+        else:
+            x = decoder(x - arr)
+    x= F.relu(x)
     return x
 
 
 class RizumuBase(nn.Module):
-    def __init__(self, size: int, real_layers: int = 4,
-                 imag_layers: int = 4, n_fft: int = 2048, hidden_size: int = 512, activate: bool = True,
-                 apply_istft: bool = True, ):
+    def __init__(self, size: int,
+                 real_layers: int = 1,
+                 imag_layers: int = 1,
+                 n_fft: int = 2048,
+                 hidden_size: int = 512,
+                 activate: bool = True,
+                 apply_istft: bool = True, is_mask: bool = False):
         super(RizumuBase, self).__init__()
         self.size = size
         hs_half = size // 2
         hs_quarter = size // 4
         self.real_layers = real_layers
         self.imag_layers = imag_layers
+        self.is_mask = is_mask
 
         # down u-net
         self.re1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
-        self.re2 = SingleEncoder(hs_half, hidden_size, hs_quarter, activate)
 
         self.ie1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
-        self.ie2 = SingleEncoder(hs_half, hidden_size, hs_quarter, activate)
 
         # bottleneck
-        self.real_bottleneck = BLSTM(hs_quarter, layers=self.real_layers, skip=True)
-        self.imag_bottleneck = BLSTM(hs_quarter, layers=self.imag_layers, skip=True)
+        self.real_bottleneck = BLSTM(hs_half, layers=self.real_layers, skip=True)
+        self.imag_bottleneck = BLSTM(hs_half, layers=self.imag_layers, skip=True)
 
-        self.rd1 = SingleDecoder(hs_quarter, hidden_size, hs_half, activate)
         self.rd2 = SingleDecoder(hs_half, hidden_size, self.size, activate)
-
-        self.id1 = SingleDecoder(hs_quarter, hidden_size, hs_half, activate)
         self.id2 = SingleDecoder(hs_half, hidden_size, self.size, activate)
+
         self.apply_istft = apply_istft
         self.istft = RISTFT(n_fft=n_fft)
 
@@ -204,8 +203,8 @@ class RizumuBase(nn.Module):
                 r_mean: torch.Tensor, r_std: torch.Tensor,
                 i_mean: torch.Tensor, i_std: torch.Tensor) -> torch.Tensor:
 
-        imag = exec_unet(imag, [self.ie1, self.ie2], self.imag_bottleneck, [self.id1, self.id2])
-        real = exec_unet(real, [self.re1, self.re2], self.real_bottleneck, [self.rd1, self.rd2])
+        imag = exec_unet(imag, [self.ie1,], self.imag_bottleneck,  [self.id2], self.is_mask)
+        real = exec_unet(real, [self.re1,], self.real_bottleneck, [self.rd2], self.is_mask)
 
         real = denormalize(real.unsqueeze(-1), r_mean, r_std)
         imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
@@ -218,7 +217,6 @@ class RizumuBase(nn.Module):
             # in the squeeze
             x = x.unsqueeze(0)
 
-        x = x.permute(0, 2, 1)
         if self.apply_istft:
             self.istft.length = initial_size
             return self.istft(x)
@@ -230,7 +228,7 @@ class RizumuModel(nn.Module):
 
     def __init__(self, n_fft: int = 4096,
                  hidden_size: int = 512,
-                 real_layers: int = 3,
+                 real_layers: int = 2,
                  imag_layers: int = 2,
                  ):
         super(RizumuModel, self).__init__()
@@ -249,14 +247,9 @@ class RizumuModel(nn.Module):
                                   n_fft=n_fft,
                                   hidden_size=hidden_size,
                                   activate=True,
-                                  apply_istft=False)
-        self.c_model = RizumuBase(size=last_param,
-                                  real_layers=real_layers,
-                                  imag_layers=imag_layers,
-                                  n_fft=n_fft,
-                                  hidden_size=hidden_size,
-                                  activate=False,
-                                  apply_istft=True)
+                                  apply_istft=False,
+                                  is_mask=True)
+
         self.istft = RISTFT(n_fft=n_fft)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -295,17 +288,13 @@ class RizumuModel(nn.Module):
         imag = i_norm
 
         # decode and un-normalize
-        # multiply by real to act as a mask, making it look
-        # like a skip connection
         m = self.m_model(initial_size, real, imag, r_mean, r_std, i_mean, i_std)
-        c = self.c_model(initial_size, real, imag, r_mean, r_std, i_mean, i_std)
         # calculate mx part
         mx = (orig * m)
         self.istft.length = initial_size
         mx = self.istft(mx)
 
-
-        return mx - c
+        return mx
 
 
 if __name__ == '__main__':
