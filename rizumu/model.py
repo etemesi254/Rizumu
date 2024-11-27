@@ -133,8 +133,8 @@ class SingleDecoder(nn.Module):
         x = x.permute(0, 2, 1)
         x = self.bc2(x)
         # x = x.permute(0, 2, 1)
-        if self.activate:
-            x = F.relu(x)
+        # if self.activate:
+        #     x = F.relu(x)
         return x
 
 
@@ -163,7 +163,7 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
             x = decoder(x * arr)
         else:
             x = decoder(x - arr)
-    x = F.relu(x)
+    #x = F.relu(x)
     return x
 
 
@@ -342,8 +342,8 @@ class RizumuBaseV2(nn.Module):
         real = real.permute(0, 2, 1)
         imag = imag.permute(0, 2, 1)
 
-        real = real * mask_real
-        imag = imag * mask_imag
+        real = mask_real
+        imag =  mask_imag
 
         real = denormalize(real.unsqueeze(-1), r_mean, r_std)
         imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
@@ -356,7 +356,7 @@ class RizumuBaseV2(nn.Module):
 
 
 class RizumuModelV2(nn.Module):
-    def __init__(self, n_fft: int = 2048, num_splits: int = 5, hidden_size: int = 512, ):
+    def __init__(self, n_fft: int = 2048, num_splits: int = 5, hidden_size: int = 512 ):
         super(RizumuModelV2, self).__init__()
         self.stft = RSTFT(n_fft=n_fft)
         self.istft = RISTFT(n_fft=n_fft)
@@ -411,7 +411,6 @@ if __name__ == '__main__':
     input = torch.rand((1, 21203))
     # torchinfo.summary(model, input_data=input)
     # model(input)
-    torch.onnx.export(model,input)
     with torch.autograd.set_detect_anomaly(True):
         model = RizumuModelV2(n_fft=2048, num_splits=10)
         input = torch.randn((2, 59090))
