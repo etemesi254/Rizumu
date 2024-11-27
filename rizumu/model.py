@@ -356,7 +356,7 @@ class RizumuBaseV2(nn.Module):
 
 
 class RizumuModelV2(nn.Module):
-    def __init__(self, n_fft: int = 2048, num_splits: int = 5, hidden_size: int = 512, ):
+    def __init__(self, n_fft: int = 2048, num_splits: int = 5, hidden_size: int = 512, real_layers: int = 1, imag_layers: int = 1):
         super(RizumuModelV2, self).__init__()
         self.stft = RSTFT(n_fft=n_fft)
         self.istft = RISTFT(n_fft=n_fft)
@@ -374,7 +374,7 @@ class RizumuModelV2(nn.Module):
             split_sizes_diff.append(end - start)
         self.models = nn.ModuleList([])
         for i in range(num_splits):
-            self.models.append(RizumuBaseV2(size=split_sizes_diff[i], hidden_size=self.hidden_size))
+            self.models.append(RizumuBaseV2(size=split_sizes_diff[i], hidden_size=self.hidden_size,real_layers=real_layers,imag_layers=imag_layers))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # step 1. perfom stft on the signal
@@ -411,9 +411,9 @@ if __name__ == '__main__':
     input = torch.rand((1, 21203))
     # torchinfo.summary(model, input_data=input)
     # model(input)
-    torch.onnx.export(model,input)
+    #torch.onnx.export(model,input)
     with torch.autograd.set_detect_anomaly(True):
-        model = RizumuModelV2(n_fft=2048, num_splits=10)
+        model = RizumuModelV2(n_fft=2048, num_splits=7,hidden_size=1024,real_layers=2,imag_layers=2)
         input = torch.randn((2, 59090))
 
         torchinfo.summary(model, input_data=input)

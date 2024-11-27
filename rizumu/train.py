@@ -8,12 +8,11 @@ from torch.utils.data import random_split, DataLoader
 from tqdm import tqdm
 
 from openunmix.model import OpenUnmix, Separator
-from openunmix.transforms import ComplexNorm
 from rizumu.data_loader import RizumuSeparatorDataset
-from rizumu.model import RizumuModel, RizumuModelV2
+from rizumu.model import RizumuModelV2
 from rizumu.pl_model import RizumuLightning, calculate_sdr
 
-import time
+
 def rizumu_train(cfg: DictConfig):
     model_config = cfg["dnr_dataset"]["rizumu"]
 
@@ -37,10 +36,19 @@ def rizumu_train(cfg: DictConfig):
     labels = model_config["labels"]
     output_label_name = model_config["output_label"]
     mix_label_name = model_config["mix_name"]
+    real_layers = model_config["real_layers"]
+    imag_layers = model_config["imag_layers"]
+    num_splits = model_config["num_splits"]
+    hidden_size = model_config["hidden_size"]
 
     checkpoint_callback = ModelCheckpoint(dirpath=model_config["log_dir"])
 
-    pl_model = RizumuLightning(labels=labels, output_label_name=output_label_name, real_layers=2, imag_layers=2,
+    pl_model = RizumuLightning(labels=labels,
+                               output_label_name=output_label_name,
+                               real_layers=real_layers,
+                               imag_layers=imag_layers,
+                               num_splits=num_splits,
+                               hidden_size=hidden_size,
                                mix_name=mix_label_name, n_fft=2048)
 
     # mps accelerator generates,nan seems like a pytorch issue

@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 import torch
 from torch.optim import Adam
 
-from rizumu.model import RizumuModel, RizumuModelV2
+from rizumu.model import RizumuModelV2
 
 loss_constant = 1000
 
@@ -71,17 +71,19 @@ class RizumuLightning(pl.LightningModule):
                  mix_name: str,
                  n_fft: int = 4096,
                  hidden_size: int = 512,
+                 num_splits: int = 5,
                  real_layers: int = 2,
-                 imag_layers: int = 2):
+                 imag_layers: int = 2,
+                 lr=1e-3):
         assert mix_name in labels, "Mix is not in labels please include it"
         assert output_label_name in labels, "Output label is not in labels please include it"
 
         super().__init__()
 
         self.save_hyperparameters()
-        self.model = RizumuModelV2(n_fft=n_fft, hidden_size=hidden_size)
-        self.count = 0
-        self.optimizer = Adam(self.model.parameters(), lr=1e-3)
+        self.model = RizumuModelV2(n_fft=n_fft, num_splits=num_splits, hidden_size=hidden_size, real_layers=real_layers,
+                                   imag_layers=imag_layers)
+        self.optimizer = Adam(self.model.parameters(), lr=lr)
         self.labels = labels
         self.output_label_name = output_label_name
         self.mix_name = mix_name
@@ -121,8 +123,6 @@ class RizumuLightning(pl.LightningModule):
         # from our batch  place labels with
         mix_input, expected_output = self.get_batch(batch)
         output = self.model(mix_input)
-        if self.device == "mps":
-            torch.mps.synchronize()
 
         return self.calculate_properties(output, expected_output, prefix="train")
 
@@ -130,12 +130,9 @@ class RizumuLightning(pl.LightningModule):
         return self.optimizer
 
     def validation_step(self, validation_batch, batch_idx):
-        self.count = 0
         # from our batch  place labels with
         mix_input, expected_output = self.get_batch(validation_batch)
 
         output = self.model(mix_input)
 
-        if self.device == "mps":
-            torch.mps.synchronize()
         return self.calculate_properties(output, expected_output, prefix="val")
