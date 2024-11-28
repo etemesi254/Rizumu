@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from openunmix.model import OpenUnmix, Separator
 from rizumu.data_loader import RizumuSeparatorDataset
-from rizumu.model import RizumuModelV2
+from rizumu.model import RizumuModel
 from rizumu.pl_model import RizumuLightning, calculate_sdr
 
 
@@ -82,7 +82,7 @@ def rizumu_train_oldschool(cfg: DictConfig):
                            persistent_workers=True, batch_size=None)
 
     if True:
-        model = RizumuModelV2(n_fft=2048)
+        model = RizumuModel(n_fft=2048)
     else:
         model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=2)})
         # model = OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=3)

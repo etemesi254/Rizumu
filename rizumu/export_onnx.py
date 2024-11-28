@@ -1,4 +1,3 @@
-from rizumu.model import RizumuModelV2
 from rizumu.pl_model import RizumuLightning
 import torch
 

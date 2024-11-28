@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 import torch
 from torch.optim import Adam
 
-from rizumu.model import RizumuModelV2
+from rizumu.model import RizumuModel
 
 loss_constant = 1000
 
@@ -81,9 +81,11 @@ class RizumuLightning(pl.LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
-        self.model = RizumuModelV2(n_fft=n_fft, num_splits=num_splits,
-                                   hidden_size=hidden_size, real_layers=real_layers,
-                                   imag_layers=imag_layers)
+        self.model = RizumuModel(n_fft=n_fft,
+                                 num_splits=num_splits,
+                                 hidden_size=hidden_size,
+                                 real_layers=real_layers,
+                                 imag_layers=imag_layers)
         self.optimizer = Adam(self.model.parameters(), lr=lr)
         self.labels = labels
         self.output_label_name = output_label_name

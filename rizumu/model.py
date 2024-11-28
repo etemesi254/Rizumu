@@ -50,59 +50,6 @@ def make_filterbanks(n_fft=4096, n_hop=1024, center=True, sample_rate=44100.0):
     return encoder, decoder
 
 
-#
-# class RSTFT(nn.Module):
-#     def __init__(self, n_fft: int = 4096,
-#                  win_length: int | None = None,
-#                  hop_length: int | None = None,
-#                  ):
-#         super(RSTFT, self).__init__()
-#         self.n_fft = n_fft
-#         self.win_length = win_length
-#         self.hop_length = hop_length
-#         self.window = torch.hann_window(self.n_fft)
-#
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         if x.device != self.window.device:
-#             self.window = self.window.to(x.device)
-#
-#         window_length = self.win_length if self.win_length is not None else (self.n_fft // 2) + 1
-#         previous_device = x.device
-#         if x.shape[-1] < window_length:
-#             x = torch.nn.functional.pad(x, (0, window_length - x.shape[-1]))
-#         stft = torch.stft(x,
-#                           n_fft=self.n_fft,
-#                           win_length=self.win_length,
-#                           window=self.window,
-#                           hop_length=self.hop_length,
-#                           return_complex=True)
-#
-#         return stft.to(previous_device)
-#
-#
-# class RISTFT(nn.Module):
-#     def __init__(self, n_fft: int = 2048, win_length: int | None = None, hop_length: int | None = None,
-#                  length: int | None = None):
-#         super(RISTFT, self).__init__()
-#         self.n_fft = n_fft
-#         self.win_length = win_length
-#         self.hop_length = hop_length
-#         self.length = length
-#         self.window = torch.hann_window(self.n_fft).to("cpu")
-#
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         previous_device = x.device
-#         if x.device != self.window.device:
-#             x = x.to(self.window.device)
-#
-#         stft = torch.istft(x, n_fft=self.n_fft,
-#                            win_length=self.win_length,
-#                            window=self.window,
-#                            hop_length=self.hop_length,
-#                            length=self.length
-#                            )
-#         return stft.to(previous_device)
-
 
 class BLSTM(nn.Module):
     def __init__(self, dim, layers=1, skip=False, *args, **kwargs):
@@ -205,9 +152,9 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
     return x
 
 
-class RizumuBaseV2(nn.Module):
+class RizumuBase(nn.Module):
     def __init__(self, size: int, hidden_size: int = 512, real_layers: int = 1, imag_layers: int = 1, activate=True):
-        super(RizumuBaseV2, self).__init__()
+        super(RizumuBase, self).__init__()
         self.size = size
         self.hidden_size = hidden_size
         self.real_layers = real_layers
@@ -262,14 +209,14 @@ class RizumuBaseV2(nn.Module):
         return x
 
 
-class RizumuModelV2(nn.Module):
-    def __init__(self, n_fft: int = 2048, num_splits: int = 5,
+class RizumuModel(nn.Module):
+    def __init__(self, n_fft: int = 2048,
+                 num_splits: int = 5,
                  hidden_size: int = 512,
-                 real_layers: int = 1, imag_layers: int = 1):
-        super(RizumuModelV2, self).__init__()
+                 real_layers: int = 1,
+                 imag_layers: int = 1):
+        super(RizumuModel, self).__init__()
         self.stft, self.istft = make_filterbanks(n_fft=n_fft)
-        self.stft = self.stft.to("cpu")
-        self.istft = self.istft.to("cpu")
         last_param = (n_fft // 2) + 1
         self.last_param = last_param
         self.num_splits = num_splits
@@ -282,10 +229,13 @@ class RizumuModelV2(nn.Module):
             end = single_split * (i + 1)
             end = min(end, last_param)
             split_sizes_diff.append(end - start)
+
         self.models = nn.ModuleList([])
         for i in range(num_splits):
-            model = RizumuBaseV2(size=split_sizes_diff[i], hidden_size=self.hidden_size, real_layers=real_layers,
-                                 imag_layers=imag_layers)
+            model = RizumuBase(size=split_sizes_diff[i],
+                               hidden_size=self.hidden_size,
+                               real_layers=real_layers,
+                               imag_layers=imag_layers)
 
             self.models.append(
                 model)
@@ -293,6 +243,9 @@ class RizumuModelV2(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # step 1. perfom stft on the signal
         initial_size = x.shape[-1]
+
+        # stft expects (batch, audio,channel) while model takes audio,channel
+        # so fake a third dimension
         x = x.unsqueeze(0)
 
         # stft needs to run on the cpu,
@@ -306,11 +259,12 @@ class RizumuModelV2(nn.Module):
         x_cpu = x.to("cpu")
         self.stft = self.stft.to("cpu")
         x = self.stft(x_cpu)
+        # return back to previous device
         x = x.to(prev_device)
 
 
         # step 2, split based on configured categories
-        # x shape is (channels,n_bins,n_timesteps)
+        # x shape is (channels,n_bins,n_timesteps,)
         channels, n_bins, n_timesteps, _ = x.shape
         # round up division.
         single_split = (n_bins + (self.num_splits - 1)) // self.num_splits
@@ -345,20 +299,12 @@ if __name__ == '__main__':
     stft, istft = make_filterbanks()
     import torchinfo
 
-    #
-    model = RizumuModelV2()
-    input, sr = torchaudio.load("/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/18544/mix.wav")
-    result = stft(input.unsqueeze(0))
 
-    # # torchinfo.summary(model, input_data=input)
-    model(input)
-    torch.onnx.export(model, input, "./onnx_pre.onnx", dynamo_export=True,
-                      input_names=["input"],
-                      output_names=["output"],
-                      dynamic_axes={"input": {0: "channels", 1: "length"},
-                                    "output": {0: "channels", 1: "length"}})
+    model = RizumuModel()
+    input, sr = torchaudio.load("/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/18544/mix.wav")
+
     with torch.autograd.set_detect_anomaly(True):
-        model = RizumuModelV2(n_fft=2048, num_splits=7, hidden_size=1024, real_layers=2, imag_layers=2)
+        model = RizumuModel(n_fft=2048, num_splits=7, hidden_size=1024, real_layers=2, imag_layers=2)
         input = torch.randn((1, 59090))
 
         torchinfo.summary(model, input_data=input)
@@ -367,4 +313,3 @@ if __name__ == '__main__':
         loss = F.mse_loss(output, input, reduction='mean')
 
         print(loss.item())
-    #     # loss.backward()
