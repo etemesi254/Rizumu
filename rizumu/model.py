@@ -159,11 +159,9 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
     # reverse outputs
     outputs.reverse()
     for arr, decoder in zip(outputs, decoders):
-        if is_mask:
-            x = decoder(x * arr)
-        else:
-            x = decoder(x - arr)
-    x = F.relu(x)
+        x = decoder(x)
+
+    #x = F.relu(x)
     return x
 
 
@@ -178,7 +176,6 @@ class RizumuBase(nn.Module):
         super(RizumuBase, self).__init__()
         self.size = size
         hs_half = size // 2
-        hs_quarter = size // 4
         self.real_layers = real_layers
         self.imag_layers = imag_layers
         self.is_mask = is_mask
@@ -211,7 +208,7 @@ class RizumuBase(nn.Module):
         x = torch.cat((real, imag), -1)
         x = torch.view_as_complex(x)
 
-        if len(x.shape) == 2:
+        if x.ndim == 2:
             # one dimensional layout, add the 2d that was lost
             # in the squeeze
             x = x.unsqueeze(0)

@@ -89,9 +89,9 @@ dnr_dataset:
     log_dir: "./chekpoints/rizumu_logs"
     use_dct: False
     quantizer: 2000
-    real_layers: 2
-    imag_layers: 2
-    num_splits: 7
+    real_layers: 1
+    imag_layers: 1
+    num_splits: 5
     hidden_size: 1024
     dataset_config:
       nb_bins: 2049
