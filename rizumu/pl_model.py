@@ -127,6 +127,10 @@ class RizumuLightning(pl.LightningModule):
 
         return self.calculate_properties(output, expected_output, prefix="train")
 
+    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
+        output = self.model(tensor)
+        return output
+
     def configure_optimizers(self):
         return self.optimizer
 

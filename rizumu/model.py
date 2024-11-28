@@ -252,6 +252,7 @@ class RizumuBaseV2(nn.Module):
 
         real = real * mask_real
         imag = imag * mask_imag
+
         real = denormalize(real.unsqueeze(-1), r_mean, r_std)
         imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
 
@@ -293,11 +294,20 @@ class RizumuModelV2(nn.Module):
         # step 1. perfom stft on the signal
         initial_size = x.shape[-1]
         x = x.unsqueeze(0)
+
+        # stft needs to run on the cpu,
+        # since on MPS (macos) it happens that operation
+        # im2col is not implemented for mps backend
+        # the code fellback to cpu and an epoch went from
+        # 30 mins -> 6 hours
+        # changing it to cpu epoch runs for  2 hours
+        # and forcing stft on cpu and the rest on gpu makes it run for 30 mins
         prev_device = x.device
         x_cpu = x.to("cpu")
         self.stft = self.stft.to("cpu")
         x = self.stft(x_cpu)
         x = x.to(prev_device)
+
 
         # step 2, split based on configured categories
         # x shape is (channels,n_bins,n_timesteps)
