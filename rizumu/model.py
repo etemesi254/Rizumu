@@ -30,7 +30,8 @@ class AsteroidISTFT(nn.Module):
 
     def forward(self, x: Tensor, length: Optional[int] = None) -> Tensor:
         aux = from_torchaudio(x)
-        return self.dec(aux, length=length)
+        x = self.dec(aux, length=length)
+        return x
 
 
 def make_filterbanks(n_fft=4096, n_hop=1024, center=True, sample_rate=44100.0):
@@ -50,7 +51,6 @@ def make_filterbanks(n_fft=4096, n_hop=1024, center=True, sample_rate=44100.0):
     return encoder, decoder
 
 
-
 class BLSTM(nn.Module):
     def __init__(self, dim, layers=1, skip=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -59,8 +59,13 @@ class BLSTM(nn.Module):
         self.skip = skip
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        a, b, c, d = x.shape
+        # squeeze batch and num_channels to one
+        x = x.reshape(a * b, c, d)
         x = self.lstm(x)[0]
         x = self.linear(x)
+        # remove the squeeze
+        x = x.reshape(a, b, c, d)
 
         return x
 
@@ -170,7 +175,7 @@ class RizumuBase(nn.Module):
         # (n_channels,nb_frames,n_bins)
         # convert to real tensor, adds a dimension to x to separate real and imaginary
         # change to (real_imaginary,n_channels,n_bins,nb_frames)
-        x = x.permute(3, 0, 2, 1)
+        x = x.permute(4, 0, 1, 3, 2)
 
         # separate real and imaginary
         # new dimensions are (n_channels,n_bins,nb_frames)
@@ -188,15 +193,13 @@ class RizumuBase(nn.Module):
         real = real * mask_real
         imag = imag * mask_imag
 
-        # the signal at this point is istft so we can multiply
-        real = real.permute(0, 2, 1)
-        imag = imag.permute(0, 2, 1)
-
         real = denormalize(real.unsqueeze(-1), r_mean, r_std)
         imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
 
         # convert back to complex tensor and return
-        x = torch.cat((real, imag), -1)
+        x = torch.cat((real, imag), dim=-1)
+        # permute to undo previous permute
+        x = x.permute(0, 1, 3, 2, 4)
 
         return x
 
@@ -235,10 +238,13 @@ class RizumuModel(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # step 1. perfom stft on the signal
         initial_size = x.shape[-1]
+        was_unsqueezed = False
 
-        # stft expects (batch, audio,channel) while model takes audio,channel
-        # so fake a third dimension
-        x = x.unsqueeze(0)
+        if x.ndim == 2:
+            # stft expects (batch, audio,channel) while model takes audio,channel
+            # so fake a third dimension
+            x = x.unsqueeze(0)
+            was_unsqueezed = True
 
         # stft needs to run on the cpu,
         # since on MPS (macos) it happens that operation
@@ -251,20 +257,23 @@ class RizumuModel(nn.Module):
         x_cpu = x.to("cpu")
         self.stft = self.stft.to("cpu")
         x = self.stft(x_cpu)
+        p = x
         # return back to previous device
         x = x.to(prev_device)
 
+        if x.ndim == 4:
+            # single-mono channel, add an extra channel
+            # to fake support for multi-channel audio
+            x = x.unsqueeze(dim=1)
 
         # step 2, split based on configured categories
         # x shape is (channels,n_bins,n_timesteps,)
-        channels, n_bins, n_timesteps, _ = x.shape
         # round up division.
-        single_split = (n_bins + (self.num_splits - 1)) // self.num_splits
+        single_split = (self.last_param + (self.num_splits - 1)) // self.num_splits
 
         # step 3, collect into categories
-        input_divs = []
-        for i in range(self.num_splits):
-            input_divs.append(x[:, i * single_split:(i + 1) * single_split, :])
+        input_divs = torch.split(x, single_split, dim=2)
+        assert len(input_divs) == self.num_splits
 
         results = []
         # run the models
@@ -272,16 +281,18 @@ class RizumuModel(nn.Module):
             results.append(self.models[pos](i))
 
         # combine the models based on the split location
-        results = torch.cat(results, dim=1)
+        results = torch.cat(results, dim=2)
+
         # force stft and istft to be in cpu otherwise perf slows down by
         # tenfold
-        results = results.to("cpu")
         self.istft = self.istft.to("cpu")
-
-        x = self.istft(results, initial_size).squeeze(dim=0)
+        x = self.istft(results, initial_size)
         x = x.to(prev_device)
-        if x.ndim == 1:
-            x = x.unsqueeze(0)
+
+        if was_unsqueezed:
+            # remove the fake dimension squeeze
+            x = x.squeeze(dim=0)
+
         return x
 
 
@@ -291,15 +302,14 @@ if __name__ == '__main__':
     stft, istft = make_filterbanks()
     import torchinfo
 
-
     model = RizumuModel()
     input, sr = torchaudio.load("/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/18544/mix.wav")
-
+    torch.onnx.export(model,input,"./hello.onnx")
     with torch.autograd.set_detect_anomaly(True):
         model = RizumuModel(n_fft=2048, num_splits=7, hidden_size=1024, real_layers=2, imag_layers=2)
-        input = torch.randn((1, 59090))
+        input = torch.randn((2, 1, 59090))
 
-        torchinfo.summary(model, input_data=input)
+        torchinfo.summary(model, input_data=input, depth=4)
 
         output: torch.Tensor = model(input)
         loss = F.mse_loss(output, input, reduction='mean')
