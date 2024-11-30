@@ -75,21 +75,17 @@ class SingleEncoder(nn.Module):
         self.output_size = output_size
 
         self.l1 = nn.Linear(self.input_size, self.hidden_size, bias=True)
-        self.bc1 = nn.BatchNorm1d(self.hidden_size)
+        self.ln1 = nn.LayerNorm(self.hidden_size)
         self.l2 = nn.Linear(hidden_size, output_size, bias=True)
-        self.bc2 = nn.BatchNorm1d(output_size)
+        self.ln2 = nn.LayerNorm(output_size)
         self.tan1 = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.l1(x)
-        x = x.permute(0, 2, 1)
-        x = self.bc1(x)
-        x = x.permute(0, 2, 1)
+        x = self.ln1(x)
         x = self.l2(x)
-        x = x.permute(0, 2, 1)
-        x = self.bc2(x)
-        x = x.permute(2, 0, 1)
-        # # limit between -1 and 1
+        x = self.ln2(x)
+        # limit between -1 and 1
         if self.activate:
             x = self.tan1(x)
         return x
@@ -104,20 +100,16 @@ class SingleDecoder(nn.Module):
         self.activate = activate
 
         self.l1 = nn.Linear(input_size, hidden_size, bias=True)
-        self.bc1 = nn.BatchNorm1d(hidden_size)
+        self.ln1 = nn.LayerNorm(hidden_size)
         self.l2 = nn.Linear(hidden_size, output_size, bias=True)
-        self.bc2 = nn.BatchNorm1d(output_size)
+        self.ln2 = nn.LayerNorm(output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.permute(1, 0, 2)
         x = self.l1(x)
-        x = x.permute(0, 2, 1)
-        x = self.bc1(x)
-        x = x.permute(0, 2, 1)
+        x = self.ln1(x)
         x = self.l2(x)
-        x = x.permute(0, 2, 1)
-        x = self.bc2(x)
-        # x = x.permute(0, 2, 1)
+        x = self.ln2(x)
+
         if self.activate:
             x = F.relu(x)
         return x
@@ -190,15 +182,15 @@ class RizumuBase(nn.Module):
         real, r_mean, r_std = normalize(real)
         imag, i_mean, i_std = normalize(imag)
         # generate mask
-        mask_imag = exec_unet(imag, [self.ie1, ], self.imag_bottleneck, [self.id2], self.is_mask)
-        mask_real = exec_unet(real, [self.re1, ], self.real_bottleneck, [self.rd2], self.is_mask)
+        mask_imag = exec_unet(imag, [self.ie1], self.imag_bottleneck, [self.id2], self.is_mask)
+        mask_real = exec_unet(real, [self.re1], self.real_bottleneck, [self.rd2], self.is_mask)
+
+        real = real * mask_real
+        imag = imag * mask_imag
 
         # the signal at this point is istft so we can multiply
         real = real.permute(0, 2, 1)
         imag = imag.permute(0, 2, 1)
-
-        real = real * mask_real
-        imag = imag * mask_imag
 
         real = denormalize(real.unsqueeze(-1), r_mean, r_std)
         imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
