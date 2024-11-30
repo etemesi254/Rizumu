@@ -54,7 +54,7 @@ def make_filterbanks(n_fft=4096, n_hop=1024, center=True, sample_rate=44100.0):
 class BLSTM(nn.Module):
     def __init__(self, dim, layers=1, skip=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.lstm = nn.LSTM(bidirectional=True, num_layers=layers, hidden_size=dim, input_size=dim)
+        self.lstm = nn.LSTM(bidirectional=True, num_layers=layers, hidden_size=dim, input_size=dim, batch_first=True)
         self.linear = nn.Linear(2 * dim, dim)
         self.skip = skip
 
@@ -115,8 +115,8 @@ class SingleDecoder(nn.Module):
         x = self.l2(x)
         x = self.ln2(x)
 
-        if self.activate:
-            x = F.relu(x)
+        # if self.activate:
+        #     x = F.relu(x)
         return x
 
 
@@ -142,10 +142,10 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
     outputs.reverse()
     for arr, decoder in zip(outputs, decoders):
         if is_mask:
-            x = decoder(x * arr)
+            x = decoder(x)
         else:
             x = decoder(x - arr)
-    x = F.relu(x)
+    # x = F.relu(x)
     return x
 
 
@@ -190,8 +190,13 @@ class RizumuBase(nn.Module):
         mask_imag = exec_unet(imag, [self.ie1], self.imag_bottleneck, [self.id2], self.is_mask)
         mask_real = exec_unet(real, [self.re1], self.real_bottleneck, [self.rd2], self.is_mask)
 
-        real = real * mask_real
-        imag = imag * mask_imag
+        # uncomment to make a mask model
+        # real = real * mask_real
+        # imag = imag * mask_imag
+
+        # uncomment to make a predictor model
+        real = mask_real
+        imag = mask_imag
 
         real = denormalize(real.unsqueeze(-1), r_mean, r_std)
         imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
@@ -281,7 +286,7 @@ class RizumuModel(nn.Module):
             results.append(self.models[pos](i))
 
         # combine the models based on the split location
-        results = torch.cat(results, dim=2)
+        results = torch.cat(results, dim=2).to("cpu")
 
         # force stft and istft to be in cpu otherwise perf slows down by
         # tenfold
@@ -304,10 +309,10 @@ if __name__ == '__main__':
 
     model = RizumuModel()
     input, sr = torchaudio.load("/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/18544/mix.wav")
-    torch.onnx.export(model,input,"./hello.onnx")
+    torch.onnx.export(model, input, "./hello.onnx")
     with torch.autograd.set_detect_anomaly(True):
         model = RizumuModel(n_fft=2048, num_splits=7, hidden_size=1024, real_layers=2, imag_layers=2)
-        input = torch.randn((2, 1, 59090))
+        input = torch.randn((1, 59090))
 
         torchinfo.summary(model, input_data=input, depth=4)
 

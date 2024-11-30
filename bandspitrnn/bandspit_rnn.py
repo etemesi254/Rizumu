@@ -162,7 +162,7 @@ def convert_to_audio(tensor: Tensor, n_fft=2048, sample_rate=44100):
 
 if __name__ == '__main__':
     n_fft = 2048
-    (in_features, sr) = load_and_pad('/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv/89918/mix.wav', n_fft)
+    (in_features, sr) = load_and_pad('/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/310/mix.wav', n_fft)
     time = in_features.shape[-1]
     cfg = {
         "sr": sr,
