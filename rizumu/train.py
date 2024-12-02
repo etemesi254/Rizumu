@@ -7,7 +7,6 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.utils.data import random_split, DataLoader
 from tqdm import tqdm
 
-from openunmix.model import OpenUnmix, Separator
 from rizumu.data_loader import RizumuSeparatorDataset
 from rizumu.model import RizumuModel
 from rizumu.pl_model import RizumuLightning, calculate_sdr
@@ -49,7 +48,8 @@ def rizumu_train(cfg: DictConfig):
                                imag_layers=imag_layers,
                                num_splits=num_splits,
                                hidden_size=hidden_size,
-                               mix_name=mix_label_name, n_fft=2048)
+                               mix_name=mix_label_name,
+                               n_fft=4096)
 
     # mps accelerator generates,nan seems like a pytorch issue
     # see https://discuss.pytorch.org/t/device-mps-is-producing-nan-weights-in-nn-embedding/159067
@@ -81,11 +81,7 @@ def rizumu_train_oldschool(cfg: DictConfig):
     dnr_train = DataLoader(dataset=dnr_dataset_train, num_workers=os.cpu_count(),
                            persistent_workers=True, batch_size=None)
 
-    if True:
-        model = RizumuModel(n_fft=2048)
-    else:
-        model = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=2)})
-        # model = OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=3)
+    model = RizumuModel(n_fft=2048)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "mps")
     model = model.to(device, non_blocking=False)
@@ -120,10 +116,12 @@ def rizumu_train_oldschool(cfg: DictConfig):
 
                 avg_loss = sum_loss / iteration
 
-                pbar.set_postfix({"sdr": sum_sdr / iteration, "loss": new_loss.item(), "avg_loss": avg_loss.item()})
+                pbar.set_postfix(
+                    {"avg_sdr": sum_sdr / iteration, "sdr": sdr, "loss": new_loss.item(), "avg_loss": avg_loss.item()})
 
                 new_loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
 
             pbar.close()
+

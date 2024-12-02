@@ -91,8 +91,7 @@ class SingleEncoder(nn.Module):
         x = self.l2(x)
         x = self.ln2(x)
         # limit between -1 and 1
-        if self.activate:
-            x = self.tan1(x)
+        x = self.tan1(x)
         return x
 
 
@@ -115,8 +114,8 @@ class SingleDecoder(nn.Module):
         x = self.l2(x)
         x = self.ln2(x)
 
-        # if self.activate:
-        #     x = F.relu(x)
+        if self.activate:
+            x = F.relu(x)
         return x
 
 
@@ -141,10 +140,8 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
     # reverse outputs
     outputs.reverse()
     for arr, decoder in zip(outputs, decoders):
-        if is_mask:
-            x = decoder(x)
-        else:
-            x = decoder(x - arr)
+        x = decoder(x*arr)
+
     # x = F.relu(x)
     return x
 
@@ -190,13 +187,9 @@ class RizumuBase(nn.Module):
         mask_imag = exec_unet(imag, [self.ie1], self.imag_bottleneck, [self.id2], self.is_mask)
         mask_real = exec_unet(real, [self.re1], self.real_bottleneck, [self.rd2], self.is_mask)
 
-        # uncomment to make a mask model
-        # real = real * mask_real
-        # imag = imag * mask_imag
 
-        # uncomment to make a predictor model
-        real = mask_real
-        imag = mask_imag
+        real = real * mask_real
+        imag = imag * mask_imag
 
         real = denormalize(real.unsqueeze(-1), r_mean, r_std)
         imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
@@ -215,6 +208,15 @@ class RizumuModel(nn.Module):
                  hidden_size: int = 512,
                  real_layers: int = 1,
                  imag_layers: int = 1):
+        """
+        Rizumu/Rhythm model
+
+        :param n_fft:  N fft size
+        :param num_splits: Number of band splits for the model.
+        :param hidden_size: Hidden size of the linear and lstm layers
+        :param real_layers: Number of LSTM layers for the real component of the network
+        :param imag_layers: Number of LSTM layers for the imaginary component of the network
+        """
         super(RizumuModel, self).__init__()
         self.stft, self.istft = make_filterbanks(n_fft=n_fft)
         last_param = (n_fft // 2) + 1
@@ -237,10 +239,16 @@ class RizumuModel(nn.Module):
                                real_layers=real_layers,
                                imag_layers=imag_layers)
 
-            self.models.append(
-                model)
+            self.models.append(model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Perform a prediction
+        :param x:  Input layout [n_channel,timesteps] or [batch,n_channel,timesteps]
+
+        :return: Predicted sound, tensor layout is the same as the input.
+
+        """
         # step 1. perfom stft on the signal
         initial_size = x.shape[-1]
         was_unsqueezed = False
@@ -258,11 +266,11 @@ class RizumuModel(nn.Module):
         # 30 mins -> 6 hours
         # changing it to cpu epoch runs for  2 hours
         # and forcing stft on cpu and the rest on gpu makes it run for 30 mins
+
         prev_device = x.device
         x_cpu = x.to("cpu")
         self.stft = self.stft.to("cpu")
         x = self.stft(x_cpu)
-        p = x
         # return back to previous device
         x = x.to(prev_device)
 
@@ -308,10 +316,8 @@ if __name__ == '__main__':
     import torchinfo
 
     model = RizumuModel()
-    input, sr = torchaudio.load("/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/18544/mix.wav")
-    torch.onnx.export(model, input, "./hello.onnx")
     with torch.autograd.set_detect_anomaly(True):
-        model = RizumuModel(n_fft=2048, num_splits=7, hidden_size=1024, real_layers=2, imag_layers=2)
+        model = RizumuModel(n_fft=2048, num_splits=7, hidden_size=1024, real_layers=4, imag_layers=4)
         input = torch.randn((1, 59090))
 
         torchinfo.summary(model, input_data=input, depth=4)

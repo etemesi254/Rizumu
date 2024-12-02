@@ -80,7 +80,7 @@ dnr_dataset:
     mix_name: "mix"
     labels: [ "mix", "speech" ]
     output_label: "speech"
-    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/"
+    dataset_dir: "/Users/etemesi/Datasets/dnr_v2/cv"
     batch_size: 1
     shuffle: true
     num_epochs: 50
@@ -93,6 +93,3 @@ dnr_dataset:
     imag_layers: 2
     num_splits: 7
     hidden_size: 1024
-    dataset_config:
-      nb_bins: 2049
-      nb_channels: 1
