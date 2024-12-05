@@ -54,7 +54,7 @@ dnr_dataset:
     labels: ["mix", "speech"]
     output_label: "speech"
     # model configurations
-    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/"
+    dataset_dir: "/Users/etemesi/Datasets/dnr_v2/cv"
     # batch size of the dataset in training
     batch_size: 1
     # whether to shuffle data when training
@@ -71,7 +71,7 @@ dnr_dataset:
     # quantizer value if we are using dct preprocessing
     quantizer: 2000
     # number of bi-LSTM layers.
-    nb_layers: 3
+    nb_layers: 1
     # dataset configurations
     dataset_config:
       nb_bins: 2049
@@ -91,5 +91,5 @@ dnr_dataset:
     quantizer: 2000
     real_layers: 2
     imag_layers: 2
-    num_splits: 7
-    hidden_size: 1024
+    num_splits: 5
+    hidden_size: 512

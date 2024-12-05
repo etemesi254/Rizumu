@@ -272,6 +272,7 @@ class Separator(nn.Module):
         # getting the STFT of mix:
         # (nb_samples, nb_channels, nb_bins, nb_frames, 2)
         mix_stft = self.stft(audio)
+        # (nb_samples,nb_channels,nb_bins,nb_frames)
         X = self.complexnorm(mix_stft)
 
         # initializing spectrograms variable

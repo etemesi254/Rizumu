@@ -115,12 +115,10 @@ class RizumuLightning(pl.LightningModule):
 
         loss = calculate_loss(output_istft, speech_istft)
         sdr = calculate_sdr(output_istft, speech_istft)
-        new_loss = (100 - sdr) * loss
 
-        self.log(f"{prefix}_loss", new_loss, prog_bar=True)
+        self.log(f"{prefix}_loss", loss, prog_bar=True)
         self.log(f"{prefix}_sdr", sdr, prog_bar=True)
-        # modify loss to be sdr * loss
-        return new_loss
+        return loss
 
     def training_step(self, batch: List[torch.Tensor], batch_idx):
         # from our batch  place labels with

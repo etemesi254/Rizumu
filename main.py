@@ -20,10 +20,10 @@ def my_app() -> None:
     if args.train_bandspitrnn:
         cfg = compose(config_name="config")
         bandspit_train(cfg)
-    elif    args.train_openunmix:
+    elif  args.train_openunmix:
         cfg = compose(config_name="config")
         openunmix_train(cfg)
-    elif True or  args.train_rizumu:
+    elif args.train_rizumu:
         cfg = compose(config_name="config")
         rizumu_train(cfg)
     else:

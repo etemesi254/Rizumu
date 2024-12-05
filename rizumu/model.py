@@ -130,6 +130,39 @@ def normalize(x: torch.Tensor) -> tuple[Tensor, Tensor, Tensor]:
     return t, mean, std
 
 
+def atan2(y, x):
+    r"""Element-wise arctangent function of y/x.
+    Returns a new tensor with signed angles in radians.
+    It is an alternative implementation of torch.atan2
+
+    Args:
+        y (Tensor): First input tensor
+        x (Tensor): Second input tensor [shape=y.shape]
+
+    Returns:
+        Tensor: [shape=y.shape].
+    """
+    pi = 2 * torch.asin(torch.tensor(1.0))
+    x += ((x == 0) & (y == 0)) * 1.0
+    out = torch.atan(y / x)
+    out += ((y >= 0) & (x < 0)) * pi
+    out -= ((y < 0) & (x < 0)) * pi
+    out *= 1 - ((y > 0) & (x == 0)) * 1.0
+    out += ((y > 0) & (x == 0)) * (pi / 2)
+    out *= 1 - ((y < 0) & (x == 0)) * 1.0
+    out += ((y < 0) & (x == 0)) * (-pi / 2)
+    return out
+
+
+def weiner(targets_spectrograms: torch.Tensor, mix_stft: torch.Tensor, ):
+    angle = atan2(mix_stft[..., 1], mix_stft[..., 0])[..., None]
+    targets_spectrograms = targets_spectrograms.unsqueeze(-1)
+    real = targets_spectrograms * torch.cos(angle)
+    imag = targets_spectrograms * torch.sin(angle)
+    combined = torch.cat((real, imag), dim=-1)
+    return combined
+
+
 def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
               decoders: [nn.Module], is_mask: bool) -> torch.Tensor:
     outputs: List[torch.Tensor] = []
@@ -140,7 +173,7 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
     # reverse outputs
     outputs.reverse()
     for arr, decoder in zip(outputs, decoders):
-        x = decoder(x*arr)
+        x = decoder(x * arr)
 
     # x = F.relu(x)
     return x
@@ -158,46 +191,28 @@ class RizumuBase(nn.Module):
 
         # down u-net
         self.re1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
-        self.ie1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
-
         # bottleneck
         self.real_bottleneck = BLSTM(hs_half, layers=self.real_layers, skip=True)
-        self.imag_bottleneck = BLSTM(hs_half, layers=self.imag_layers, skip=True)
-
         self.rd2 = SingleDecoder(hs_half, hidden_size, self.size, activate)
-        self.id2 = SingleDecoder(hs_half, hidden_size, self.size, activate)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # at this point we have the following dimensions
-        # (n_channels,nb_frames,n_bins)
-        # convert to real tensor, adds a dimension to x to separate real and imaginary
-        # change to (real_imaginary,n_channels,n_bins,nb_frames)
-        x = x.permute(4, 0, 1, 3, 2)
+        x_orig = x
 
-        # separate real and imaginary
-        # new dimensions are (n_channels,n_bins,nb_frames)
-        real, imag = torch.split(x, 1, dim=0)
+        X_norm = torch.abs(torch.view_as_complex(x))
 
-        real = real.squeeze(dim=0)
-        imag = imag.squeeze(dim=0)
-        # normalize
-        real, r_mean, r_std = normalize(real)
-        imag, i_mean, i_std = normalize(imag)
+        x = X_norm
+        x = x.permute(0, 1, 3, 2)
+
+        real, r_mean, r_std = normalize(x)
         # generate mask
-        mask_imag = exec_unet(imag, [self.ie1], self.imag_bottleneck, [self.id2], self.is_mask)
         mask_real = exec_unet(real, [self.re1], self.real_bottleneck, [self.rd2], self.is_mask)
 
-
         real = real * mask_real
-        imag = imag * mask_imag
 
-        real = denormalize(real.unsqueeze(-1), r_mean, r_std)
-        imag = denormalize(imag.unsqueeze(-1), i_mean, i_std)
+        real = denormalize(real, r_mean, r_std)
+        real = real.permute(0, 1, 3, 2)
 
-        # convert back to complex tensor and return
-        x = torch.cat((real, imag), dim=-1)
-        # permute to undo previous permute
-        x = x.permute(0, 1, 3, 2, 4)
+        x = weiner(real, x_orig)
 
         return x
 
@@ -310,14 +325,12 @@ class RizumuModel(nn.Module):
 
 
 if __name__ == '__main__':
-    import torchaudio
-
     stft, istft = make_filterbanks()
     import torchinfo
 
     model = RizumuModel()
     with torch.autograd.set_detect_anomaly(True):
-        model = RizumuModel(n_fft=2048, num_splits=7, hidden_size=1024, real_layers=4, imag_layers=4)
+        model = RizumuModel(n_fft=2048, num_splits=7, hidden_size=512, real_layers=2, imag_layers=2)
         input = torch.randn((1, 59090))
 
         torchinfo.summary(model, input_data=input, depth=4)

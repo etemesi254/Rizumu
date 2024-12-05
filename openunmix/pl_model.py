@@ -105,11 +105,9 @@ class OpenUnmixLightning(pl.LightningModule):
 
         loss = calculate_loss(output_istft, speech_istft)
         sdr = calculate_sdr(output_istft, speech_istft)
-        snr = calculate_snr(output_istft, speech_istft)
 
         self.log(f"{prefix}_loss", loss, prog_bar=True)
         self.log(f"{prefix}_sdr", sdr, prog_bar=True)
-        self.log(f"{prefix}_snr", snr, prog_bar=True)
         return loss
 
     def training_step(self, batch: List[torch.Tensor], batch_idx):
