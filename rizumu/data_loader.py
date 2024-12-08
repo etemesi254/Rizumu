@@ -80,9 +80,9 @@ def preprocess_dct(tensor: torch.Tensor, dct_scaler: float):
 
     frames = split_frame(t, frame_length=frame_length, hop_length=hop_length)
     dct_coefficients = np.array([exec_dct(frame,dct_scaler) for frame in frames.T])
-    dct_coefficients.resize(initial_shape)
+    output = np.resize(dct_coefficients, initial_shape)
     c = 0
-    return dct_coefficients
+    return output
     #return exec_dct(t, dct_scaler)
 
 
@@ -134,7 +134,7 @@ class RizumuSeparatorDataset(Dataset):
             tensor, sr = load_audio(file)
             if self.preprocess_dct:
                 tensor = preprocess_dct(tensor, self.dct_scaler)
-                loaded_files.append(torch.from_numpy(tensor))
+                loaded_files.append(torch.from_numpy(tensor).clone().to(torch.float32))
             else:
                 loaded_files.append(tensor)
 

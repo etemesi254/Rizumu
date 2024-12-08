@@ -49,7 +49,7 @@ def rizumu_train(cfg: DictConfig):
                                num_splits=num_splits,
                                hidden_size=hidden_size,
                                mix_name=mix_label_name,
-                               n_fft=4096)
+                               n_fft=2048)
 
     # mps accelerator generates,nan seems like a pytorch issue
     # see https://discuss.pytorch.org/t/device-mps-is-producing-nan-weights-in-nn-embedding/159067

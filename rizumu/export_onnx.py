@@ -4,8 +4,9 @@ from rizumu.pl_model import RizumuLightning
 
 
 def export_onnx(filename: str = "./rizumu_onnx.onnx"):
-    model = RizumuLightning.load_from_checkpoint(
-        "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=18-step=13585.ckpt")
+    # model = RizumuLightning.load_from_checkpoint(
+    #     "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=12-step=13871-v1.ckpt")
+    model = RizumuLightning(labels=["mix","speech"],output_label_name="speech",mix_name="mix")
     # input and output are dynamic, so we can send anything
     sample_input = torch.randn(1, 23000)
     model.to_onnx(filename, sample_input,

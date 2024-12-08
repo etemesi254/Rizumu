@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
 from torch import Tensor
-from torch.nn import BatchNorm1d, Linear, Parameter
+from torch.nn import BatchNorm1d, Linear, Parameter, LayerNorm
 
 if __name__ == "__main__":
     from filtering import wiener
@@ -30,23 +30,6 @@ class BLSTM(nn.Module):
 
 
 class OpenUnmix(nn.Module):
-    """OpenUnmix Core spectrogram based separation module.
-
-    Args:
-        nb_bins (int): Number of input time-frequency bins (Default: `4096`).
-        nb_channels (int): Number of input audio channels (Default: `2`).
-        hidden_size (int): Size for bottleneck layers (Default: `512`).
-        nb_layers (int): Number of Bi-LSTM layers (Default: `3`).
-        unidirectional (bool): Use causal model useful for realtime purpose.
-            (Default `False`)
-        input_mean (ndarray or None): global data mean of shape `(nb_bins, )`.
-            Defaults to zeros(nb_bins)
-        input_scale (ndarray or None): global data mean of shape `(nb_bins, )`.
-            Defaults to ones(nb_bins)
-        max_bin (int or None): Internal frequency bin threshold to
-            reduce high frequency content. Defaults to `None` which results
-            in `nb_bins`
-    """
 
     def __init__(
             self,
@@ -71,7 +54,7 @@ class OpenUnmix(nn.Module):
 
         self.fc1 = Linear(self.nb_bins * nb_channels, hidden_size, bias=False)
 
-        self.bn1 = BatchNorm1d(hidden_size)
+        self.bn1 = LayerNorm(hidden_size)
 
         if unidirectional:
             lstm_hidden_size = hidden_size
@@ -87,7 +70,7 @@ class OpenUnmix(nn.Module):
         fc2_hiddensize = hidden_size * 2
         self.fc2 = Linear(in_features=fc2_hiddensize, out_features=hidden_size, bias=False)
 
-        self.bn2 = BatchNorm1d(hidden_size)
+        self.bn2 = LayerNorm(hidden_size)
 
         self.fc3 = Linear(
             in_features=hidden_size,
@@ -95,7 +78,7 @@ class OpenUnmix(nn.Module):
             bias=False,
         )
 
-        self.bn3 = BatchNorm1d(self.nb_output_bins * nb_channels)
+        self.bn3 = LayerNorm(self.nb_output_bins * nb_channels)
 
         if input_mean is not None:
             input_mean = torch.from_numpy(-input_mean[: self.nb_bins]).float()
@@ -147,7 +130,7 @@ class OpenUnmix(nn.Module):
         # and encode to (nb_frames*nb_samples, hidden_size)
         x = self.fc1(x.reshape(-1, nb_channels * self.nb_bins))
         # normalize every instance in a batch
-        x = self.bn1(x)
+        #x = self.bn1(x)
         x = x.reshape(nb_frames, nb_samples, self.hidden_size)
         # squash range ot [-1, 1]
         x = torch.tanh(x)
@@ -160,13 +143,13 @@ class OpenUnmix(nn.Module):
 
         # first dense stage + batch norm
         x = self.fc2(x.reshape(-1, x.shape[-1]))
-        x = self.bn2(x)
+       # x = self.bn2(x)
 
         x = F.relu(x)
 
         # second dense stage + layer norm
         x = self.fc3(x)
-        x = self.bn3(x)
+        #x = self.bn3(x)
 
         # reshape back to original dim
         x = x.reshape(nb_frames, nb_samples, nb_channels, self.nb_output_bins)
@@ -423,7 +406,11 @@ def preprocess(
 if __name__ == "__main__":
     import torchinfo
 
-    separator = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=1, nb_layers=7)})
-    torchinfo.summary(separator)
+    separator = Separator(target_models={"speech": OpenUnmix(nb_bins=2049, nb_channels=2, nb_layers=2)})
+    input = torch.randn(1,2,78090)
+    torchinfo.summary(separator,input_data=input)
+    p = separator(input)
+
+
 
     pass

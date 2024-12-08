@@ -9,7 +9,7 @@ dnr_dataset:
     labels: ["mix", "speech"]
     output_label: "speech"
     # model configurations
-    dataset_dir: "/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/"
+    dataset_dir: "/Users/etemesi/Datasets/dnr_v2/cv"
     # batch size of the dataset in training
     batch_size: 1
     # whether to shuffle data when training
@@ -17,7 +17,7 @@ dnr_dataset:
     # number of epochs to go
     num_epochs: 52
     # whether  we start our model from a previously saved checkpoint or a new model
-    checkpoint: true
+    checkpoint: false
     # if checkpoint is true, start from this checkpoint path
     checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/bandspitrnn_logs/epoch=38-step=1248.ckpt"
     log_dir: "./chekpoints/bandspitrnn_logs"
@@ -83,13 +83,13 @@ dnr_dataset:
     dataset_dir: "/Users/etemesi/Datasets/dnr_v2/cv"
     batch_size: 1
     shuffle: true
-    num_epochs: 50
+    num_epochs: 12
     checkpoint: false
     checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=12-step=9295.ckpt"
     log_dir: "./chekpoints/rizumu_logs"
-    use_dct: False
+    use_dct: True
     quantizer: 2000
-    real_layers: 2
-    imag_layers: 2
-    num_splits: 5
-    hidden_size: 512
+    real_layers: 3
+    imag_layers: 0
+    num_splits: 2
+    hidden_size: 1024

@@ -59,13 +59,9 @@ class BLSTM(nn.Module):
         self.skip = skip
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        a, b, c, d = x.shape
-        # squeeze batch and num_channels to one
-        x = x.reshape(a * b, c, d)
         x = self.lstm(x)[0]
         x = self.linear(x)
         # remove the squeeze
-        x = x.reshape(a, b, c, d)
 
         return x
 
@@ -79,17 +75,20 @@ class SingleEncoder(nn.Module):
         self.activate = activate
         self.output_size = output_size
 
-        self.l1 = nn.Linear(self.input_size, self.hidden_size, bias=True)
-        self.ln1 = nn.LayerNorm(self.hidden_size)
-        self.l2 = nn.Linear(hidden_size, output_size, bias=True)
-        self.ln2 = nn.LayerNorm(output_size)
+        self.l1 = nn.Linear(self.input_size, self.output_size, bias=True)
+        # self.c1 = nn.Conv1d(self.output_size, self.output_size, 3, padding=1)
+        # self.ln1 = nn.LayerNorm(self.hidden_size)
+        # self.l2 = nn.Linear(hidden_size, output_size, bias=True)
+        # self.ln2 = nn.LayerNorm(output_size)
         self.tan1 = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.l1(x)
-        x = self.ln1(x)
-        x = self.l2(x)
-        x = self.ln2(x)
+        # layout is
+
+        x:torch.Tensor = self.l1(x)
+        # x = x.permute(0, 2, 1).contiguous()
+        # x = self.c1(x)
+        # x = x.permute(0, 2, 1).contiguous()
         # limit between -1 and 1
         x = self.tan1(x)
         return x
@@ -103,19 +102,21 @@ class SingleDecoder(nn.Module):
         self.output_size = output_size
         self.activate = activate
 
-        self.l1 = nn.Linear(input_size, hidden_size, bias=True)
-        self.ln1 = nn.LayerNorm(hidden_size)
-        self.l2 = nn.Linear(hidden_size, output_size, bias=True)
-        self.ln2 = nn.LayerNorm(output_size)
+        self.l1 = nn.Linear(input_size, output_size, bias=True)
+        # self.c1 = nn.ConvTranspose1d(self.output_size, self.output_size, 3, padding=1)
+        # self.ln1 = nn.LayerNorm(hidden_size)
+        # self.l2 = nn.Linear(hidden_size, output_size, bias=True)
+        # self.ln2 = nn.LayerNorm(output_size)
+        self.relu = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.l1(x)
-        x = self.ln1(x)
-        x = self.l2(x)
-        x = self.ln2(x)
+        # x = x.permute(0, 2, 1).contiguous()
+        # x = self.c1(x)
+        # x = x.permute(0, 2, 1).contiguous()
 
-        if self.activate:
-            x = F.relu(x)
+
+        x = self.relu(x)
         return x
 
 
@@ -154,7 +155,7 @@ def atan2(y, x):
     return out
 
 
-def weiner(targets_spectrograms: torch.Tensor, mix_stft: torch.Tensor, ):
+def weiner(targets_spectrograms: torch.Tensor, mix_stft: torch.Tensor):
     angle = atan2(mix_stft[..., 1], mix_stft[..., 0])[..., None]
     targets_spectrograms = targets_spectrograms.unsqueeze(-1)
     real = targets_spectrograms * torch.cos(angle)
@@ -179,6 +180,26 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
     return x
 
 
+def complex_abs(x: torch.tensor):
+    """
+    Complex absolute value of a tensor, tensor shape has two dimensions
+    where 0 is real and 1 is imaginary.
+
+    This exists because onnx has no view_as_complex
+
+    Equivalent to torch.abs(torch.view_as_complex(x))
+
+    :param x: Tensor
+
+    :return: Absolute value of tensor
+    """
+    assert x.shape[-1] == 2, "Shape is not compatible type"
+    a: torch.Tensor = x[..., 0]
+    b: torch.Tensor = x[..., 1]
+    result = torch.sqrt((a ** 2 + b ** 2))
+    return result
+
+
 class RizumuBase(nn.Module):
     def __init__(self, size: int, hidden_size: int = 512, real_layers: int = 1, imag_layers: int = 1, activate=True):
         super(RizumuBase, self).__init__()
@@ -189,19 +210,20 @@ class RizumuBase(nn.Module):
         hs_half = size // 2
         self.is_mask = True
 
-        # down u-net
         self.re1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
-        # bottleneck
         self.real_bottleneck = BLSTM(hs_half, layers=self.real_layers, skip=True)
         self.rd2 = SingleDecoder(hs_half, hidden_size, self.size, activate)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_orig = x
 
-        X_norm = torch.abs(torch.view_as_complex(x))
+        X_norm = complex_abs(x)
 
         x = X_norm
         x = x.permute(0, 1, 3, 2)
+
+        a, b, c, d = x.shape
+        x = x.reshape(a * b, c, d).contiguous()
 
         real, r_mean, r_std = normalize(x)
         # generate mask
@@ -210,6 +232,8 @@ class RizumuBase(nn.Module):
         real = real * mask_real
 
         real = denormalize(real, r_mean, r_std)
+
+        real = real.reshape(a, b, c, d).contiguous()
         real = real.permute(0, 1, 3, 2)
 
         x = weiner(real, x_orig)
@@ -330,12 +354,14 @@ if __name__ == '__main__':
 
     model = RizumuModel()
     with torch.autograd.set_detect_anomaly(True):
-        model = RizumuModel(n_fft=2048, num_splits=7, hidden_size=512, real_layers=2, imag_layers=2)
-        input = torch.randn((1, 59090))
+        model = RizumuModel(n_fft=2048, num_splits=4, hidden_size=2048, real_layers=1, imag_layers=2)
+        input = torch.randn((1, 78090))
 
         torchinfo.summary(model, input_data=input, depth=4)
 
         output: torch.Tensor = model(input)
         loss = F.mse_loss(output, input, reduction='mean')
+        model.zero_grad()
+        loss.backward()
 
         print(loss.item())

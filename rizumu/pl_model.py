@@ -69,7 +69,7 @@ class RizumuLightning(pl.LightningModule):
                  labels: List[str],
                  output_label_name: str,
                  mix_name: str,
-                 n_fft: int = 4096,
+                 n_fft: int = 2048,
                  hidden_size: int = 512,
                  num_splits: int = 5,
                  real_layers: int = 2,
