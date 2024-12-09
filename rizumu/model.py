@@ -60,7 +60,7 @@ class BLSTM(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.lstm(x)[0]
-        x = self.linear(x)
+        x = F.relu(self.linear(x))
         # remove the squeeze
 
         return x
@@ -76,21 +76,12 @@ class SingleEncoder(nn.Module):
         self.output_size = output_size
 
         self.l1 = nn.Linear(self.input_size, self.output_size, bias=True)
-        # self.c1 = nn.Conv1d(self.output_size, self.output_size, 3, padding=1)
-        # self.ln1 = nn.LayerNorm(self.hidden_size)
-        # self.l2 = nn.Linear(hidden_size, output_size, bias=True)
-        # self.ln2 = nn.LayerNorm(output_size)
-        self.tan1 = nn.Tanh()
+
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # layout is
+        x = F.relu(self.l1(x))
 
-        x:torch.Tensor = self.l1(x)
-        # x = x.permute(0, 2, 1).contiguous()
-        # x = self.c1(x)
-        # x = x.permute(0, 2, 1).contiguous()
-        # limit between -1 and 1
-        x = self.tan1(x)
         return x
 
 
@@ -102,21 +93,10 @@ class SingleDecoder(nn.Module):
         self.output_size = output_size
         self.activate = activate
 
-        self.l1 = nn.Linear(input_size, output_size, bias=True)
-        # self.c1 = nn.ConvTranspose1d(self.output_size, self.output_size, 3, padding=1)
-        # self.ln1 = nn.LayerNorm(hidden_size)
-        # self.l2 = nn.Linear(hidden_size, output_size, bias=True)
-        # self.ln2 = nn.LayerNorm(output_size)
-        self.relu = nn.ReLU()
+        self.l1 = nn.Linear(input_size, self.output_size, bias=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.l1(x)
-        # x = x.permute(0, 2, 1).contiguous()
-        # x = self.c1(x)
-        # x = x.permute(0, 2, 1).contiguous()
-
-
-        x = self.relu(x)
+        x = F.relu(self.l1(x))
         return x
 
 
@@ -175,8 +155,6 @@ def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
     outputs.reverse()
     for arr, decoder in zip(outputs, decoders):
         x = decoder(x * arr)
-
-    # x = F.relu(x)
     return x
 
 
@@ -217,12 +195,12 @@ class RizumuBase(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_orig = x
 
-        X_norm = complex_abs(x)
+        x = complex_abs(x)
 
-        x = X_norm
-        x = x.permute(0, 1, 3, 2)
+        x = x.permute(0, 1, 3, 2).contiguous()
 
         a, b, c, d = x.shape
+
         x = x.reshape(a * b, c, d).contiguous()
 
         real, r_mean, r_std = normalize(x)
@@ -234,7 +212,7 @@ class RizumuBase(nn.Module):
         real = denormalize(real, r_mean, r_std)
 
         real = real.reshape(a, b, c, d).contiguous()
-        real = real.permute(0, 1, 3, 2)
+        real = real.permute(0, 1, 3, 2).contiguous()
 
         x = weiner(real, x_orig)
 
@@ -351,6 +329,9 @@ class RizumuModel(nn.Module):
 if __name__ == '__main__':
     stft, istft = make_filterbanks()
     import torchinfo
+    import logging
+
+    logging.basicConfig(level=logging.DEBUG)
 
     model = RizumuModel()
     with torch.autograd.set_detect_anomaly(True):

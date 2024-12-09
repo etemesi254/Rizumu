@@ -23,7 +23,7 @@ def my_app() -> None:
     elif  args.train_openunmix:
         cfg = compose(config_name="config")
         openunmix_train(cfg)
-    elif args.train_rizumu:
+    elif True or args.train_rizumu:
         cfg = compose(config_name="config")
         rizumu_train(cfg)
     else:

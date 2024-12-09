@@ -1,3 +1,4 @@
+import logging
 import os
 
 import pytorch_lightning as pl
@@ -86,6 +87,8 @@ def rizumu_train_oldschool(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "mps")
     model = model.to(device, non_blocking=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    logging.basicConfig(level=logging.DEBUG)
+
     model.train()
     with torch.autograd.set_detect_anomaly(True):
         for epoch in range(model_config["num_epochs"]):

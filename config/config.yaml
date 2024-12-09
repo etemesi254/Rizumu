@@ -83,13 +83,13 @@ dnr_dataset:
     dataset_dir: "/Users/etemesi/Datasets/dnr_v2/cv"
     batch_size: 1
     shuffle: true
-    num_epochs: 12
-    checkpoint: false
-    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=12-step=9295.ckpt"
+    num_epochs: 50
+    checkpoint: True
+    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=9-step=10670-v1.ckpt"
     log_dir: "./chekpoints/rizumu_logs"
     use_dct: True
     quantizer: 2000
-    real_layers: 3
+    real_layers: 2
     imag_layers: 0
     num_splits: 2
     hidden_size: 1024
