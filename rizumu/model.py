@@ -192,43 +192,16 @@ class RizumuBase(nn.Module):
         self.imag_layers = imag_layers
         hs_half = size // 2
         self.is_mask = True
-
         self.model = SourceSeparationModel()
-
-        # self.re1 = SingleMaskEncoder(self.size, hidden_size, hs_half, activate)
-        # self.real_bottleneck = MaskBLSTM(hs_half, layers=self.real_layers, skip=True)
-        # self.rd2 = SingleMaskDecoder(hs_half, hidden_size, self.size, activate)
-        #
-        # self.ie1 = SingleMaskEncoder(self.size, hidden_size, hs_half, activate)
-        # self.imag_bottleneck = MaskBLSTM(hs_half, layers=self.real_layers, skip=True)
-        # self.id2 = SingleMaskDecoder(hs_half, hidden_size, self.size, activate)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_orig = x
 
         x = complex_abs(x)
+
         real, r_mean, r_std = normalize(x)
-
-        # x = x.permute(0, 1, 3, 2).contiguous()
-        #
-        # a, b, c, d = x.shape
-        #
-        # x = x.reshape(a * b, c, d).contiguous()
-        #
-        # real, r_mean, r_std = normalize(x)
-        # # generate mask
-        # mask_real = exec_unet(real, [self.re1], self.real_bottleneck, [self.rd2], self.is_mask)
-        # #        mask_imag = exec_unet(real, [self.ie1], self.imag_bottleneck, [self.id2], self.is_mask)
-        #
-        # real = real * mask_real
-        # refined_real = exec_unet(real, [self.ie1], self.imag_bottleneck, [self.id2], self.is_mask)
-        # real = real * refined_real
         real = self.model(real)
-
         real = denormalize(real, r_mean, r_std)
-
-        # real = real.reshape(a, b, c, d).contiguous()
-        # real = real.permute(0, 1, 3, 2).contiguous()
 
         x = weiner(real, x_orig)
 

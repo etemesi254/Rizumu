@@ -3,9 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def round_to_nearest(x, n):
-    return ((x + (n - 1)) // n) * n
-
 
 def _decoder_block(in_channels, out_channels):
     """Create decoder block with convolution, normalization, and activation"""
@@ -18,7 +15,7 @@ def _decoder_block(in_channels, out_channels):
 
 
 def _encoder_block(in_channels, out_channels):
-    """Create encoder block with convolution, normalization, and activation"""
+    """Create encoder block with convolution and activation"""
     return nn.Sequential(
         nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
         nn.ReLU(inplace=True),
@@ -153,94 +150,27 @@ class SourceSeparationModel(nn.Module):
 
         # Decoder path with skip connections
         up4 = self.upconv4(bridge)
+
         up4 = torch.cat([up4, enc3], dim=1)
-        dec4 = self.dec4(up4)
+        dc4 = self.dec4(up4)
 
-        up3 = self.upconv3(dec4)
+        up3 = self.upconv3(dc4)
         up3 = torch.cat([up3, enc2], dim=1)
-        dec3 = self.dec3(up3)
-        up2 = self.upconv2(dec3)
-        up2 = torch.cat([up2, enc1], dim=1)
-        dec2 = self.dec2(up2)
 
-        up1 = self.upconv1(dec2)
+        dc3 = self.dec3(up3)
+        up2 = self.upconv2(dc3)
+
+        up2 = torch.cat([up2, enc1], dim=1)
+        dc2 = self.dec2(up2)
+
+        up1 = self.upconv1(dc2)
+
 
         x_mask = self.final_conv(up1)
-
         # remove the padding by slicing
         x_mask = x_mask[:, :, :orig_shape[-2], :orig_shape[-1]]
         # mask the original piece.
         return x_orig * x_mask
-
-
-# Rest of the previous implementation remains the same (spectral_loss, prepare_data, train_source_separation)
-def spectral_loss(pred, target):
-    """
-    Custom loss function combining magnitude and phase preservation
-
-    Args:
-        pred (torch.Tensor): Predicted spectrogram
-        target (torch.Tensor): Ground truth spectrogram
-
-    Returns:
-        torch.Tensor: Computed loss
-    """
-    # Magnitude loss (L1)
-    mag_loss = F.l1_loss(torch.abs(pred), torch.abs(target))
-
-    # Phase preservation loss
-    phase_loss = F.mse_loss(torch.angle(pred), torch.angle(target))
-
-    return mag_loss + 0.1 * phase_loss
-
-
-def prepare_data(mix_spectrogram, target_spectrogram):
-    """
-    Prepare input data for the model
-
-    Args:
-        mix_spectrogram (torch.Tensor): Mixed music spectrogram
-        target_spectrogram (torch.Tensor): Target source spectrogram
-
-    Returns:
-        tuple: Prepared input and target tensors
-    """
-    # Normalize spectrograms
-    mix_spectrogram = (mix_spectrogram - mix_spectrogram.min()) / (mix_spectrogram.max() - mix_spectrogram.min())
-    target_spectrogram = (target_spectrogram - target_spectrogram.min()) / (
-            target_spectrogram.max() - target_spectrogram.min())
-
-    return mix_spectrogram, target_spectrogram
-
-
-# Example usage
-def train_source_separation():
-    # Initialize model
-    model = SourceSeparationModel(input_channels=1, output_channels=1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    # Simulated training loop (replace with actual data loading)
-    for epoch in range(100):
-        # Simulate input spectrograms (you'd use real data)
-        mix_spec = torch.randn(1, 1, 256, 256)
-        target_spec = torch.randn(1, 1, 256, 256)
-
-        # Prepare data
-        mix_spec, target_spec = prepare_data(mix_spec, target_spec)
-
-        # Forward pass
-        separated_spec = model(mix_spec)
-
-        # Compute loss
-        loss = spectral_loss(separated_spec, target_spec)
-
-        # Backward pass and optimization
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        print(f"Epoch {epoch + 1}, Loss: {loss.item()}")
-
 
 if __name__ == "__main__":
     import torchinfo
