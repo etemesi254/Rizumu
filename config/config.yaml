@@ -84,12 +84,12 @@ dnr_dataset:
     batch_size: 1
     shuffle: true
     num_epochs: 50
-    checkpoint: True
-    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=9-step=10670-v1.ckpt"
+    checkpoint: False
+    checkpoint_path: ""
     log_dir: "./chekpoints/rizumu_logs"
     use_dct: True
     quantizer: 2000
     real_layers: 2
     imag_layers: 0
-    num_splits: 2
+    num_splits: 1
     hidden_size: 1024

@@ -1,6 +1,9 @@
 from typing import List, Optional
 
+import torchaudio
 from torch.nn import functional as F
+
+from rizumu.temp_py import SourceSeparationModel
 
 norm_bias = 1e-8
 
@@ -51,7 +54,7 @@ def make_filterbanks(n_fft=4096, n_hop=1024, center=True, sample_rate=44100.0):
     return encoder, decoder
 
 
-class BLSTM(nn.Module):
+class MaskBLSTM(nn.Module):
     def __init__(self, dim, layers=1, skip=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.lstm = nn.LSTM(bidirectional=True, num_layers=layers, hidden_size=dim, input_size=dim, batch_first=True)
@@ -66,10 +69,10 @@ class BLSTM(nn.Module):
         return x
 
 
-class SingleEncoder(nn.Module):
+class SingleMaskEncoder(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int,
                  activate: bool = True):
-        super(SingleEncoder, self).__init__()
+        super(SingleMaskEncoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.activate = activate
@@ -77,17 +80,14 @@ class SingleEncoder(nn.Module):
 
         self.l1 = nn.Linear(self.input_size, self.output_size, bias=True)
 
-
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = F.relu(self.l1(x))
-
         return x
 
 
-class SingleDecoder(nn.Module):
+class SingleMaskDecoder(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int, activate: bool = True):
-        super(SingleDecoder, self).__init__()
+        super(SingleMaskDecoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
@@ -98,6 +98,11 @@ class SingleDecoder(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = F.relu(self.l1(x))
         return x
+
+
+class SubEncoder(nn.Module):
+    def __init__(self, input_size: int, hidden_size: int, output_size: int, activate: bool = True):
+        self.l1 = nn.Linear(self.input_size, self.output_size, bias=True)
 
 
 def denormalize(x: Tensor, mean: torch.Tensor, std: torch.Tensor) -> Tensor:
@@ -188,31 +193,42 @@ class RizumuBase(nn.Module):
         hs_half = size // 2
         self.is_mask = True
 
-        self.re1 = SingleEncoder(self.size, hidden_size, hs_half, activate)
-        self.real_bottleneck = BLSTM(hs_half, layers=self.real_layers, skip=True)
-        self.rd2 = SingleDecoder(hs_half, hidden_size, self.size, activate)
+        self.model = SourceSeparationModel()
+
+        # self.re1 = SingleMaskEncoder(self.size, hidden_size, hs_half, activate)
+        # self.real_bottleneck = MaskBLSTM(hs_half, layers=self.real_layers, skip=True)
+        # self.rd2 = SingleMaskDecoder(hs_half, hidden_size, self.size, activate)
+        #
+        # self.ie1 = SingleMaskEncoder(self.size, hidden_size, hs_half, activate)
+        # self.imag_bottleneck = MaskBLSTM(hs_half, layers=self.real_layers, skip=True)
+        # self.id2 = SingleMaskDecoder(hs_half, hidden_size, self.size, activate)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_orig = x
 
         x = complex_abs(x)
-
-        x = x.permute(0, 1, 3, 2).contiguous()
-
-        a, b, c, d = x.shape
-
-        x = x.reshape(a * b, c, d).contiguous()
-
         real, r_mean, r_std = normalize(x)
-        # generate mask
-        mask_real = exec_unet(real, [self.re1], self.real_bottleneck, [self.rd2], self.is_mask)
 
-        real = real * mask_real
+        # x = x.permute(0, 1, 3, 2).contiguous()
+        #
+        # a, b, c, d = x.shape
+        #
+        # x = x.reshape(a * b, c, d).contiguous()
+        #
+        # real, r_mean, r_std = normalize(x)
+        # # generate mask
+        # mask_real = exec_unet(real, [self.re1], self.real_bottleneck, [self.rd2], self.is_mask)
+        # #        mask_imag = exec_unet(real, [self.ie1], self.imag_bottleneck, [self.id2], self.is_mask)
+        #
+        # real = real * mask_real
+        # refined_real = exec_unet(real, [self.ie1], self.imag_bottleneck, [self.id2], self.is_mask)
+        # real = real * refined_real
+        real = self.model(real)
 
         real = denormalize(real, r_mean, r_std)
 
-        real = real.reshape(a, b, c, d).contiguous()
-        real = real.permute(0, 1, 3, 2).contiguous()
+        # real = real.reshape(a, b, c, d).contiguous()
+        # real = real.permute(0, 1, 3, 2).contiguous()
 
         x = weiner(real, x_orig)
 
@@ -335,10 +351,10 @@ if __name__ == '__main__':
 
     model = RizumuModel()
     with torch.autograd.set_detect_anomaly(True):
-        model = RizumuModel(n_fft=2048, num_splits=4, hidden_size=2048, real_layers=1, imag_layers=2)
-        input = torch.randn((1, 78090))
+        model = RizumuModel(n_fft=2048, num_splits=2, hidden_size=2048, real_layers=1, imag_layers=2)
+        input, sr = torchaudio.load("/Users/etemesi/Datasets/dnr_v2/cv/258/mix.wav")
 
-        torchinfo.summary(model, input_data=input, depth=4)
+        torchinfo.summary(model, input_data=input, depth=5)
 
         output: torch.Tensor = model(input)
         loss = F.mse_loss(output, input, reduction='mean')
