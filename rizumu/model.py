@@ -210,7 +210,7 @@ class RizumuBase(nn.Module):
 
 class RizumuModel(nn.Module):
     def __init__(self, n_fft: int = 2048,
-                 num_splits: int = 5,
+                 num_splits: int = 1,
                  hidden_size: int = 512,
                  real_layers: int = 1,
                  imag_layers: int = 1):

@@ -9,4 +9,9 @@ torchaudio~=2.5.1
 numpy~=2.1.3
 tqdm==4.67.0
 asteroid-filterbanks==0.4.0
+
+# Model exporting
 onnx==1.17.0
+
+PyQt6==6.8
+pyaudio==0.2.14 # need to install portaudio before on macos

@@ -5,9 +5,9 @@ from rizumu.pl_model import RizumuLightning
 
 
 def export_onnx(filename: str = "./rizumu_onnx.onnx"):
-    # model = RizumuLightning.load_from_checkpoint(
-    #     "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=49-step=53350.ckpt")
-    model = RizumuLightning(labels=["mix","speech"],output_label_name="speech",mix_name="mix",num_splits=1)
+    model = RizumuLightning.load_from_checkpoint(
+        "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=30-step=33077.ckpt")
+    #model = RizumuLightning(labels=["mix","speech"],output_label_name="speech",mix_name="mix",num_splits=1)
     # input and output are dynamic, so we can send anything
     sample_input = torch.randn(1, 23000)
     model.to_onnx(filename, sample_input,
@@ -19,7 +19,7 @@ def export_onnx(filename: str = "./rizumu_onnx.onnx"):
                   dynamic_axes={"input": {0: "channels", 1: "length"},
                                 "output": {0: "channels", 1: "length"}})
 
-    input,sr = torchaudio.load("./hello.wav")
+    input,sr = torchaudio.load("/Users/etemesi/Datasets/dnr_v2/cv/258/mix.wav")
     output = model(input).detach()
     torchaudio.save("./hello2.wav", output,sr,encoding="PCM_F",format="wav")
 

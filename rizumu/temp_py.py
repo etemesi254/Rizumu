@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-
 def _decoder_block(in_channels, out_channels):
     """Create decoder block with convolution, normalization, and activation"""
     return nn.Sequential(
@@ -131,7 +130,6 @@ class SourceSeparationModel(nn.Module):
         # divides it by half.
         x = pad_to_multiple_of_16(x)
 
-
         # Encoder path
         enc1 = self.enc1(x)
         enc2 = self.enc2(enc1)
@@ -165,12 +163,12 @@ class SourceSeparationModel(nn.Module):
 
         up1 = self.upconv1(dc2)
 
-
         x_mask = self.final_conv(up1)
         # remove the padding by slicing
         x_mask = x_mask[:, :, :orig_shape[-2], :orig_shape[-1]]
         # mask the original piece.
-        return x_orig * x_mask
+        return x_mask
+
 
 if __name__ == "__main__":
     import torchinfo
