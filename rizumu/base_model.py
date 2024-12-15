@@ -108,24 +108,18 @@ class SourceDecoder(nn.Module):
 
 
 class SourceSeparationModel(nn.Module):
-    def __init__(self, input_channels=1, output_channels=1, hidden_size=512, depth=4):
-        """
-        U-Net inspired architecture for music source separation with Bi-LSTM bridge
+    def __init__(self, input_channels=1, output_channels=1, lstm_layers=1, hidden_size=512, depth=4):
 
-        Args:
-            input_channels (int): Number of input audio channels (typically 1 for mono)
-            output_channels (int): Number of separated source channels
-            hidden_size (int): Hidden size for Bi-LSTM layers
-        """
         super(SourceSeparationModel, self).__init__()
 
-        # Encoder (Downsampling) path
-        # self.enc1 = SourceEncoder(input_channels, 64)
-        # self.enc2 = SourceEncoder(64, 128)
-        # self.enc3 = SourceEncoder(128, 256)
-        # self.enc4 = SourceEncoder(256, 512)
         self.encoders = nn.ModuleList()
         self.depth = depth
+
+        # build encoder
+        #
+        # n -> 1,64,128,256,512..2**n -> based on depth.
+        # but first one must start at 1, so that is a special
+        # case
         for i in range(depth):
             n = 2 ** (i + 5)
             n_1 = 2 ** (i + 6)
@@ -135,17 +129,25 @@ class SourceSeparationModel(nn.Module):
                 self.encoders.append(SourceEncoder(input_size=n, output_size=n_1))
 
         # Bi-LSTM Bridge
-        self.bottleneck = BLSTM(input_size=512,hidden_size=hidden_size, output_size=512)
+        #
+        # its input from the encoder can be calculated as where the encoder stops
+        input_depth = 2 ** (depth + 5)
+        self.bottleneck = BLSTM(input_size=input_depth, hidden_size=hidden_size, output_size=input_depth,
+                                layers=lstm_layers)
 
-
+        # Decoders, logic is same as encoders but the data is reversed
         self.decoders = nn.ModuleList()
+
         for i in range(depth - 1):
-            n_1 = 2 ** (i + 5 + depth)
-            n = 2 ** (i + 4 + depth)
+            n_1 = 2 ** ((5 + depth) - i)
+            n = 2 ** ((4 + depth) - i)
             dec4 = SourceDecoder(n_1, n)
             self.decoders.append(dec4)
 
-        self.final = nn.Sequential(nn.Conv2d(64, output_channels, kernel_size=1), nn.ReLU())
+        # last layer does not do skip connections and hence why it is separate
+        self.final = nn.Sequential(nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
+                                   nn.Conv2d(32, output_channels, kernel_size=1),
+                                   nn.ReLU())
 
     def forward(self, x):
         """
@@ -158,13 +160,14 @@ class SourceSeparationModel(nn.Module):
         Returns:
             torch.Tensor: Separated source spectrogram
         """
+        orig = x
         orig_shape = x.shape
 
         # Pad the network since the downsample
         # network will reduce it and will lose the odd network
         # doing it to 16 because we encode 4 layers deep and each layer
         # divides it by half.
-        x = pad_to_multiple_of_n(x, 2**self.depth)
+        x = pad_to_multiple_of_n(x, 2 ** self.depth)
 
         encode_results = []
         for encoder in self.encoders:
@@ -172,14 +175,13 @@ class SourceSeparationModel(nn.Module):
             encode_results.append(x)
 
         # Bi-LSTM Bridge
-        x = self.bottleneck(encode_results[-1])
-
+        x = self.bottleneck(encode_results.pop(-1))
 
         # decoder
         for decoder in self.decoders:
             x = decoder(x, encode_results.pop(-1))
 
-
+        #
         x = self.final(x)
 
         # remove the padding by slicing
@@ -196,9 +198,10 @@ if __name__ == "__main__":
     stft = torch.stft(audio, n_fft=2048, return_complex=True, window=torch.hann_window(2048))
     stft = stft.unsqueeze(0).to("mps")
 
-    model = SourceSeparationModel(input_channels=1, output_channels=1).to("mps")
+    model = SourceSeparationModel(input_channels=1, output_channels=1, depth=3, hidden_size=512, lstm_layers=1).to(
+        "mps")
     s = torch.abs(stft).to("mps")
     out = model(s)
     print(s.shape)
-    c = torchinfo.summary(model, input_data=out, device="mps")
+    c = torchinfo.summary(model, input_data=out, device="mps", depth=4)
     print(out.shape)

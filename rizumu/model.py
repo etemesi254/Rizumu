@@ -3,7 +3,7 @@ from typing import List, Optional
 import torchaudio
 from torch.nn import functional as F
 
-from rizumu.temp_py import SourceSeparationModel
+from rizumu.base_model import SourceSeparationModel
 
 norm_bias = 1e-8
 
@@ -149,20 +149,6 @@ def weiner(targets_spectrograms: torch.Tensor, mix_stft: torch.Tensor):
     return combined
 
 
-def exec_unet(x: torch.Tensor, encoders: [nn.Module], bottleneck: nn.Module,
-              decoders: [nn.Module], is_mask: bool) -> torch.Tensor:
-    outputs: List[torch.Tensor] = []
-    for encoder in encoders:
-        x = encoder(x)
-        outputs.append(x)
-    x = bottleneck(x)
-    # reverse outputs
-    outputs.reverse()
-    for arr, decoder in zip(outputs, decoders):
-        x = decoder(x * arr)
-    return x
-
-
 def complex_abs(x: torch.tensor):
     """
     Complex absolute value of a tensor, tensor shape has two dimensions
@@ -184,15 +170,18 @@ def complex_abs(x: torch.tensor):
 
 
 class RizumuBase(nn.Module):
-    def __init__(self, size: int, hidden_size: int = 512, real_layers: int = 1, imag_layers: int = 1, activate=True):
+    def __init__(self, input_channels: int = 1,
+                 output_channels: int = 1,
+                 lstm_layers: int = 1,
+                 hidden_size: int = 512,
+                 depth: int = 4):
         super(RizumuBase, self).__init__()
-        self.size = size
-        self.hidden_size = hidden_size
-        self.real_layers = real_layers
-        self.imag_layers = imag_layers
-        hs_half = size // 2
-        self.is_mask = True
-        self.model = SourceSeparationModel()
+
+        self.model = SourceSeparationModel(input_channels=input_channels,
+                                           output_channels=output_channels,
+                                           lstm_layers=lstm_layers,
+                                           hidden_size=hidden_size,
+                                           depth=depth)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_orig = x
@@ -212,16 +201,16 @@ class RizumuModel(nn.Module):
     def __init__(self, n_fft: int = 2048,
                  num_splits: int = 1,
                  hidden_size: int = 512,
-                 real_layers: int = 1,
-                 imag_layers: int = 1):
+                 input_channels: int = 1,
+                 output_channels: int = 1,
+                 lstm_layers: int = 1,
+                 depth: int = 4):
         """
         Rizumu/Rhythm model
 
         :param n_fft:  N fft size
         :param num_splits: Number of band splits for the model.
         :param hidden_size: Hidden size of the linear and lstm layers
-        :param real_layers: Number of LSTM layers for the real component of the network
-        :param imag_layers: Number of LSTM layers for the imaginary component of the network
         """
         super(RizumuModel, self).__init__()
         self.stft, self.istft = make_filterbanks(n_fft=n_fft)
@@ -240,10 +229,11 @@ class RizumuModel(nn.Module):
 
         self.models = nn.ModuleList([])
         for i in range(num_splits):
-            model = RizumuBase(size=split_sizes_diff[i],
-                               hidden_size=self.hidden_size,
-                               real_layers=real_layers,
-                               imag_layers=imag_layers)
+            model = RizumuBase(input_channels=input_channels,
+                               output_channels=output_channels,
+                               depth=depth,
+                               hidden_size=hidden_size,
+                               lstm_layers=lstm_layers)
 
             self.models.append(model)
 
@@ -324,7 +314,7 @@ if __name__ == '__main__':
 
     model = RizumuModel()
     with torch.autograd.set_detect_anomaly(True):
-        model = RizumuModel(n_fft=2048, num_splits=2, hidden_size=2048, real_layers=1, imag_layers=2)
+        model = RizumuModel(n_fft=2048, num_splits=2, hidden_size=512)
         input, sr = torchaudio.load("/Users/etemesi/Datasets/dnr_v2/cv/258/mix.wav")
 
         torchinfo.summary(model, input_data=input, depth=5)

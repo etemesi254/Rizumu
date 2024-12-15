@@ -71,9 +71,12 @@ class RizumuLightning(pl.LightningModule):
                  mix_name: str,
                  n_fft: int = 2048,
                  hidden_size: int = 512,
-                 num_splits: int = 5,
-                 real_layers: int = 2,
-                 imag_layers: int = 2,
+                 num_splits: int = 1,
+                 input_channels=1,
+                 output_channels=1,
+                 lstm_layers: int = 1,
+                 depth=4,
+
                  lr=1e-3):
         assert mix_name in labels, "Mix is not in labels please include it"
         assert output_label_name in labels, "Output label is not in labels please include it"
@@ -84,8 +87,10 @@ class RizumuLightning(pl.LightningModule):
         self.model = RizumuModel(n_fft=n_fft,
                                  num_splits=num_splits,
                                  hidden_size=hidden_size,
-                                 real_layers=real_layers,
-                                 imag_layers=imag_layers)
+                                 depth=depth,
+                                 input_channels=input_channels,
+                                 output_channels=output_channels,
+                                 lstm_layers=lstm_layers)
         self.optimizer = Adam(self.model.parameters(), lr=lr)
         self.labels = labels
         self.output_label_name = output_label_name

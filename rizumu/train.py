@@ -36,21 +36,20 @@ def rizumu_train(cfg: DictConfig):
     labels = model_config["labels"]
     output_label_name = model_config["output_label"]
     mix_label_name = model_config["mix_name"]
-    real_layers = model_config["real_layers"]
-    imag_layers = model_config["imag_layers"]
     num_splits = model_config["num_splits"]
     hidden_size = model_config["hidden_size"]
+    lstm_layers = model_config["lstm_layers"]
 
     checkpoint_callback = ModelCheckpoint(dirpath=model_config["log_dir"])
 
     pl_model = RizumuLightning(labels=labels,
                                output_label_name=output_label_name,
-                               real_layers=real_layers,
-                               imag_layers=imag_layers,
                                num_splits=num_splits,
                                hidden_size=hidden_size,
                                mix_name=mix_label_name,
-                               n_fft=2048)
+                               n_fft=2048,
+                               depth=4,
+                               lstm_layers=lstm_layers)
 
     # mps accelerator generates,nan seems like a pytorch issue
     # see https://discuss.pytorch.org/t/device-mps-is-producing-nan-weights-in-nn-embedding/159067
@@ -127,4 +126,3 @@ def rizumu_train_oldschool(cfg: DictConfig):
                 optimizer.zero_grad()
 
             pbar.close()
-

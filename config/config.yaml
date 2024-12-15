@@ -6,7 +6,7 @@ dnr_dataset:
     # which they will be loaded so the
     # dataset loader will return a tuple of tensor
     # containing (mix,speech,vocals and sfx)
-    labels: ["mix", "speech"]
+    labels: [ "mix", "speech" ]
     output_label: "speech"
     # model configurations
     dataset_dir: "/Users/etemesi/Datasets/dnr_v2/cv"
@@ -29,7 +29,7 @@ dnr_dataset:
       n_fft: 2048
       # rough bandspit configuration
       bandsplits:
-        [[1000, 100], [4000, 400], [8000, 600], [16000, 2000], [20000, 4000]]
+        [ [ 1000, 100 ], [ 4000, 400 ], [ 8000, 600 ], [ 16000, 2000 ], [ 20000, 4000 ] ]
       complex_as_channel: true
       # DNR config is channel
       is_mono: true
@@ -51,7 +51,7 @@ dnr_dataset:
     # which they will be loaded so the
     # dataset loader will return a tuple of tensor
     # containing (mix,speech,vocals and sfx)
-    labels: ["mix", "speech"]
+    labels: [ "mix", "speech" ]
     output_label: "speech"
     # model configurations
     dataset_dir: "/Users/etemesi/Datasets/dnr_v2/cv"
@@ -89,7 +89,6 @@ dnr_dataset:
     log_dir: "./chekpoints/rizumu_logs"
     use_dct: True
     quantizer: 2000
-    real_layers: 2
-    imag_layers: 0
+    lstm_layers: 2
     num_splits: 1
-    hidden_size: 1024
+    hidden_size: 512
