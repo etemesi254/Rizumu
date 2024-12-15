@@ -42,7 +42,7 @@ class BLSTM(nn.Module):
         x = self.lstm(x)[0]
         x = self.linear(x)
 
-        x = x.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2)
+        x = x.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
 
         x = self.conv2(x)
         x = self.relu(x)
