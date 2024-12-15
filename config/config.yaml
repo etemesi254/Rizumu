@@ -84,7 +84,7 @@ dnr_dataset:
     batch_size: 1
     shuffle: true
     num_epochs: 50
-    checkpoint: True
+    checkpoint: False
     checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=20-step=22407.ckpt"
     log_dir: "./chekpoints/rizumu_logs"
     use_dct: True

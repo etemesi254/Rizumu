@@ -25,7 +25,7 @@ def my_app() -> None:
         openunmix_train(cfg)
     elif True or args.train_rizumu:
         cfg = compose(config_name="config")
-        rizumu_train_oldschool(cfg)
+        rizumu_train(cfg)
     else:
         parser.print_help()
 

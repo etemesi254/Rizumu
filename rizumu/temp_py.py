@@ -40,9 +40,9 @@ class BLSTM(nn.Module):
         return x
 
 
-def pad_to_multiple_of_16(tensor: torch.Tensor):
+def pad_to_multiple_of_n(tensor: torch.Tensor, n: int):
     """
-    Pad a 4D PyTorch tensor so that the last two dimensions are divisible by 16.
+    Pad a 4D PyTorch tensor so that the last two dimensions are divisible by n.
 
     Parameters:
     -----------
@@ -52,13 +52,13 @@ def pad_to_multiple_of_16(tensor: torch.Tensor):
     Returns:
     --------
     torch.Tensor
-        Padded tensor with last two dimensions padded to be divisible by 16
+        Padded tensor with last two dimensions padded to be divisible by n
     """
     # Calculate padding needed for third dimension (height)
-    height_pad = (16 - (tensor.shape[-2] % 16)) % 16
+    height_pad = (n - (tensor.shape[-2] % n)) % n
 
     # Calculate padding needed for fourth dimension (width)
-    width_pad = (16 - (tensor.shape[-1] % 16)) % 16
+    width_pad = (n - (tensor.shape[-1] % n)) % n
 
     # Create padding configuration
     # PyTorch's pad function uses the reverse order of dimensions
@@ -72,7 +72,7 @@ def pad_to_multiple_of_16(tensor: torch.Tensor):
 
 
 class SourceSeparationModel(nn.Module):
-    def __init__(self, input_channels=1, output_channels=1, hidden_size=512):
+    def __init__(self, input_channels=1, output_channels=1, hidden_size=512, depth=4):
         """
         U-Net inspired architecture for music source separation with Bi-LSTM bridge
 
@@ -94,7 +94,6 @@ class SourceSeparationModel(nn.Module):
         self.bilstm_bridge = BLSTM(input_size=512, hidden_size=hidden_size, layers=2)
         self.bridge_reconstruct = nn.Conv2d(hidden_size, 512, kernel_size=1)
 
-        # Decoder (Upsampling) path
         self.upconv4 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
         self.dec4 = _decoder_block(512, 256)
 
@@ -121,14 +120,13 @@ class SourceSeparationModel(nn.Module):
         Returns:
             torch.Tensor: Separated source spectrogram
         """
-        x_orig = x
         orig_shape = x.shape
 
         # Pad the network since the downsample
         # network will reduce it and will lose the odd network
         # doing it to 16 because we encode 4 layers deep and each layer
         # divides it by half.
-        x = pad_to_multiple_of_16(x)
+        x = pad_to_multiple_of_n(x, 16)
 
         # Encoder path
         enc1 = self.enc1(x)
@@ -148,16 +146,14 @@ class SourceSeparationModel(nn.Module):
 
         # Decoder path with skip connections
         up4 = self.upconv4(bridge)
-
         up4 = torch.cat([up4, enc3], dim=1)
         dc4 = self.dec4(up4)
 
         up3 = self.upconv3(dc4)
         up3 = torch.cat([up3, enc2], dim=1)
-
         dc3 = self.dec3(up3)
-        up2 = self.upconv2(dc3)
 
+        up2 = self.upconv2(dc3)
         up2 = torch.cat([up2, enc1], dim=1)
         dc2 = self.dec2(up2)
 
