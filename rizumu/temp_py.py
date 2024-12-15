@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 def _decoder_block(in_channels, out_channels):
@@ -25,17 +24,28 @@ def _encoder_block(in_channels, out_channels):
 
 
 class BLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, layers=1, skip=False, *args, **kwargs):
+    def __init__(self, input_size, hidden_size, output_size, layers=1, skip=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.conv1 = nn.Conv2d(input_size, input_size, kernel_size=1)
+
         self.lstm = nn.LSTM(bidirectional=True, num_layers=layers, hidden_size=hidden_size, input_size=input_size,
                             batch_first=True)
         self.linear = nn.Linear(2 * hidden_size, hidden_size)
-        self.skip = skip
+        self.conv2 = nn.Conv2d(hidden_size, output_size, kernel_size=1)
+        self.relu = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.conv1(x)
+        # reshape
+        batch_size, channels, height, width = x.shape
+        x = x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels)
         x = self.lstm(x)[0]
-        x = F.relu(self.linear(x))
-        # remove the squeeze
+        x = self.linear(x)
+
+        x = x.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2)
+
+        x = self.conv2(x)
+        x = self.relu(x)
 
         return x
 
@@ -71,6 +81,32 @@ def pad_to_multiple_of_n(tensor: torch.Tensor, n: int):
     return padded_tensor
 
 
+class SourceEncoder(nn.Module):
+    def __init__(self, input_size, output_size):
+        super().__init__()
+        self.block = _encoder_block(input_size, output_size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.block(x)
+        return x
+
+
+class SourceDecoder(nn.Module):
+    def __init__(self, input_size, output_size):
+        super().__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.conv = nn.ConvTranspose2d(input_size, output_size, kernel_size=2, stride=2)
+        self.block = _decoder_block(input_size, output_size)
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        up = self.conv(x)
+        x = torch.cat([up, y], dim=1)
+
+        x = self.block(x)
+        return x
+
+
 class SourceSeparationModel(nn.Module):
     def __init__(self, input_channels=1, output_channels=1, hidden_size=512, depth=4):
         """
@@ -84,30 +120,32 @@ class SourceSeparationModel(nn.Module):
         super(SourceSeparationModel, self).__init__()
 
         # Encoder (Downsampling) path
-        self.enc1 = _encoder_block(input_channels, 64)
-        self.enc2 = _encoder_block(64, 128)
-        self.enc3 = _encoder_block(128, 256)
-        self.enc4 = _encoder_block(256, 512)
+        # self.enc1 = SourceEncoder(input_channels, 64)
+        # self.enc2 = SourceEncoder(64, 128)
+        # self.enc3 = SourceEncoder(128, 256)
+        # self.enc4 = SourceEncoder(256, 512)
+        self.encoders = nn.ModuleList()
+        self.depth = depth
+        for i in range(depth):
+            n = 2 ** (i + 5)
+            n_1 = 2 ** (i + 6)
+            if i == 0:
+                self.encoders.append(SourceEncoder(input_size=input_channels, output_size=n_1))
+            else:
+                self.encoders.append(SourceEncoder(input_size=n, output_size=n_1))
 
         # Bi-LSTM Bridge
-        self.bridge_reshape = nn.Conv2d(512, 512, kernel_size=1)
-        self.bilstm_bridge = BLSTM(input_size=512, hidden_size=hidden_size, layers=2)
-        self.bridge_reconstruct = nn.Conv2d(hidden_size, 512, kernel_size=1)
+        self.bottleneck = BLSTM(input_size=512,hidden_size=hidden_size, output_size=512)
 
-        self.upconv4 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
-        self.dec4 = _decoder_block(512, 256)
 
-        self.upconv3 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
-        self.dec3 = _decoder_block(256, 128)
+        self.decoders = nn.ModuleList()
+        for i in range(depth - 1):
+            n_1 = 2 ** (i + 5 + depth)
+            n = 2 ** (i + 4 + depth)
+            dec4 = SourceDecoder(n_1, n)
+            self.decoders.append(dec4)
 
-        self.upconv2 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
-        self.dec2 = _decoder_block(128, 64)
-
-        self.upconv1 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
-        self.dec1 = _decoder_block(64, 32)
-
-        # Final convolution to get output channels
-        self.final_conv = nn.Conv2d(32, output_channels, kernel_size=1)
+        self.final = nn.Sequential(nn.Conv2d(64, output_channels, kernel_size=1), nn.ReLU())
 
     def forward(self, x):
         """
@@ -126,44 +164,28 @@ class SourceSeparationModel(nn.Module):
         # network will reduce it and will lose the odd network
         # doing it to 16 because we encode 4 layers deep and each layer
         # divides it by half.
-        x = pad_to_multiple_of_n(x, 16)
+        x = pad_to_multiple_of_n(x, 2**self.depth)
 
-        # Encoder path
-        enc1 = self.enc1(x)
-        enc2 = self.enc2(enc1)
-        enc3 = self.enc3(enc2)
-        enc4 = self.enc4(enc3)
+        encode_results = []
+        for encoder in self.encoders:
+            x = encoder(x)
+            encode_results.append(x)
 
         # Bi-LSTM Bridge
+        x = self.bottleneck(encode_results[-1])
 
-        # Reshape and prepare for LSTM
-        bridge_input = self.bridge_reshape(enc4)
-        batch_size, channels, height, width = bridge_input.shape
-        lstm_input = bridge_input.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels)
-        lstm_out = self.bilstm_bridge(lstm_input)
-        lstm_out = lstm_out.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2)
-        bridge = self.bridge_reconstruct(lstm_out)
 
-        # Decoder path with skip connections
-        up4 = self.upconv4(bridge)
-        up4 = torch.cat([up4, enc3], dim=1)
-        dc4 = self.dec4(up4)
+        # decoder
+        for decoder in self.decoders:
+            x = decoder(x, encode_results.pop(-1))
 
-        up3 = self.upconv3(dc4)
-        up3 = torch.cat([up3, enc2], dim=1)
-        dc3 = self.dec3(up3)
 
-        up2 = self.upconv2(dc3)
-        up2 = torch.cat([up2, enc1], dim=1)
-        dc2 = self.dec2(up2)
+        x = self.final(x)
 
-        up1 = self.upconv1(dc2)
-
-        x_mask = self.final_conv(up1)
         # remove the padding by slicing
-        x_mask = x_mask[:, :, :orig_shape[-2], :orig_shape[-1]]
+        x = x[:, :, :orig_shape[-2], :orig_shape[-1]]
         # mask the original piece.
-        return x_mask
+        return x
 
 
 if __name__ == "__main__":
