@@ -28,10 +28,14 @@ class BLSTM(nn.Module):
         super().__init__(*args, **kwargs)
         self.conv1 = nn.Conv2d(input_size, input_size, kernel_size=1)
 
-        self.lstm = nn.LSTM(bidirectional=True, num_layers=layers,
-                            hidden_size=hidden_size, input_size=input_size,
+        self.lstm = nn.LSTM(bidirectional=True,
+                            num_layers=layers,
+                            hidden_size=hidden_size,
+                            input_size=input_size,
                             batch_first=True)
+
         self.linear = nn.Linear(2 * hidden_size, hidden_size)
+
         self.conv2 = nn.Conv2d(hidden_size, output_size, kernel_size=1)
         self.relu = nn.ReLU()
 
@@ -204,7 +208,7 @@ if __name__ == "__main__":
     stft = torch.stft(audio, n_fft=2048, return_complex=True, window=torch.hann_window(2048))
     stft = stft.unsqueeze(0).to("mps")
 
-    model = SourceSeparationModel(input_channels=1, output_channels=1, depth=4, hidden_size=512, lstm_layers=2).to(
+    model = SourceSeparationModel(input_channels=1, output_channels=1, depth=4, hidden_size=512, lstm_layers=1).to(
         "mps")
     s = torch.abs(stft).to("mps")
     c = torchinfo.summary(model, input_data=s, device="mps", depth=4)

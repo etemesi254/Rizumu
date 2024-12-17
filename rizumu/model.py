@@ -258,7 +258,7 @@ class RizumuModel(nn.Module):
         # stft needs to run on the cpu,
         # since on MPS (macos) it happens that operation
         # im2col is not implemented for mps backend
-        # the code fellback to cpu and an epoch went from
+        # the code fallback to cpu and an epoch went from
         # 30 mins -> 6 hours
         # changing it to cpu epoch runs for  2 hours
         # and forcing stft on cpu and the rest on gpu makes it run for 30 mins
