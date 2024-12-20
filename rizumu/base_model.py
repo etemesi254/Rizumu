@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 def _decoder_block(in_channels, out_channels):
@@ -21,6 +22,31 @@ def _encoder_block(in_channels, out_channels):
         nn.ReLU(inplace=True),
         nn.MaxPool2d(kernel_size=2, stride=2)
     )
+
+
+class SelfAttention(nn.Module):
+    """Self-attention mechanism to enhance feature representation"""
+
+    def __init__(self, channels):
+        super().__init__()
+        self.query = nn.Conv2d(channels, channels // 8, kernel_size=1)
+        self.key = nn.Conv2d(channels, channels // 8, kernel_size=1)
+        self.value = nn.Conv2d(channels, channels, kernel_size=1)
+        self.gamma = nn.Parameter(torch.zeros(1))
+
+    def forward(self, x):
+        batch, C, H, W = x.size()
+
+        query = self.query(x).view(batch, -1, H * W).permute(0, 2, 1)
+        key = self.key(x).view(batch, -1, H * W)
+        energy = torch.bmm(query, key)
+        attention = F.softmax(energy, dim=-1)
+
+        value = self.value(x).view(batch, -1, H * W)
+        out = torch.bmm(value, attention.permute(0, 2, 1))
+        out = out.view(batch, C, H, W)
+
+        return self.gamma * out + x
 
 
 class BLSTM(nn.Module):
@@ -138,8 +164,11 @@ class SourceSeparationModel(nn.Module):
         #
         # its input from the encoder can be calculated as where the encoder stops
         input_depth = 2 ** (depth + 5)
-        self.bottleneck = BLSTM(input_size=input_depth, hidden_size=hidden_size, output_size=input_depth,
-                                layers=lstm_layers)
+        self.bottleneck = nn.Sequential(SelfAttention(input_depth),
+                                        BLSTM(input_size=input_depth,
+                                              hidden_size=hidden_size,
+                                              output_size=input_depth,
+                                              layers=lstm_layers))
 
         # Decoders, logic is same as encoders but the data is reversed
         self.decoders = nn.ModuleList()
@@ -190,7 +219,6 @@ class SourceSeparationModel(nn.Module):
         # decoder
         for decoder in self.decoders:
             x = decoder(x, encode_results.pop(-1))
-
 
         x = self.final(x)
 
