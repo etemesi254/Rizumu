@@ -30,6 +30,9 @@ class BandSpitMusicSeparatorDataset(Dataset):
 
     def _get_audio_files(self, files_to_load: List[str]):
         audio_files = []
+        # listdir does not work, for whatever reason i do not want to find out
+        # MACOSSSSSSSS WHY
+
         for folder_name in os.listdir(self.root_dir):
             folder_path = os.path.join(self.root_dir, folder_name)
             if os.path.isdir(folder_path):
@@ -64,7 +67,7 @@ class BandSpitMusicSeparatorDataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = BandSpitMusicSeparatorDataset(root_dir="/Users/etemesi/PycharmProjects/Spite/data/dnr_v2/cv",
+    dataset = BandSpitMusicSeparatorDataset(root_dir="/Volumes/Untitled/DNR/dnr/dnr/dnr/cv",
                                             files_to_load=["mix", "speech", "music", "sfx"])
 
     start = time.time()

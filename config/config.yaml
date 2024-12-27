@@ -54,7 +54,7 @@ dnr_dataset:
     labels: [ "mix", "speech" ]
     output_label: "speech"
     # model configurations
-    dataset_dir: "/Users/etemesi/Datasets/dnr_v2/cv"
+    dataset_dir: "/Volumes/Untitled/DNR/dnr/dnr/dnr/tr"
     # batch size of the dataset in training
     batch_size: 1
     # whether to shuffle data when training
@@ -80,12 +80,14 @@ dnr_dataset:
     mix_name: "mix"
     labels: [ "mix", "speech" ]
     output_label: "speech"
-    dataset_dir: "/Users/etemesi/Datasets/dnr_v2/cv"
+    training_set: "/Volumes/Untitled/DNR/dnr/dnr/dnr/train"
+    testing_set: "/Volumes/Untitled/DNR/dnr/dnr/dnr/tt"
+    validation_set: "/Volumes/Untitled/DNR/dnr/dnr/dnr/cv"
     batch_size: 1
     shuffle: true
     num_epochs: 50
-    checkpoint: False
-    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=20-step=22407.ckpt"
+    checkpoint: True
+    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=18-step=58102.ckpt"
     log_dir: "./chekpoints/rizumu_logs"
     use_dct: True
     quantizer: 2000

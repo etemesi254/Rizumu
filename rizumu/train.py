@@ -16,16 +16,17 @@ from rizumu.pl_model import RizumuLightning, calculate_sdr
 def rizumu_train(cfg: DictConfig):
     model_config = cfg["dnr_dataset"]["rizumu"]
 
-    dataset = RizumuSeparatorDataset(root_dir=model_config["dataset_dir"],
+    dnr_dataset_train = RizumuSeparatorDataset(root_dir=model_config["training_set"],
                                      files_to_load=model_config["labels"],
                                      preprocess_dct=model_config["use_dct"],
                                      dct_scaler=model_config["quantizer"])
 
+
     # divide the dataset into train and test
-    size = len(dataset)
-    train_size = int(size * 0.8)
-    test_size = size - train_size
-    dnr_dataset_train, dnr_dataset_val = random_split(dataset=dataset, lengths=[train_size, test_size])
+    dnr_dataset_val = RizumuSeparatorDataset(root_dir=model_config["testing_set"],
+                                               files_to_load=model_config["labels"],
+                                               preprocess_dct=model_config["use_dct"],
+                                               dct_scaler=model_config["quantizer"])
 
     dnr_train = DataLoader(dataset=dnr_dataset_train, num_workers=os.cpu_count(),
                            persistent_workers=True, batch_size=None)
@@ -67,16 +68,17 @@ def rizumu_train(cfg: DictConfig):
 def rizumu_train_oldschool(cfg: DictConfig):
     model_config = cfg["dnr_dataset"]["rizumu"]
 
-    dataset = RizumuSeparatorDataset(root_dir=model_config["dataset_dir"],
-                                     files_to_load=model_config["labels"],
-                                     preprocess_dct=model_config["use_dct"],
-                                     dct_scaler=model_config["quantizer"])
+    dnr_dataset_train = RizumuSeparatorDataset(root_dir=model_config["training_set"],
+                                               files_to_load=model_config["labels"],
+                                               preprocess_dct=model_config["use_dct"],
+                                               dct_scaler=model_config["quantizer"])
 
     # divide the dataset into train and test
-    size = len(dataset)
-    train_size = int(size * 0.8)
-    test_size = size - train_size
-    dnr_dataset_train, dnr_dataset_val = random_split(dataset=dataset, lengths=[train_size, test_size])
+    dnr_dataset_val = RizumuSeparatorDataset(root_dir=model_config["testing_set"],
+                                             files_to_load=model_config["labels"],
+                                             preprocess_dct=model_config["use_dct"],
+                                             dct_scaler=model_config["quantizer"])
+
 
     dnr_train = DataLoader(dataset=dnr_dataset_train, num_workers=os.cpu_count(),
                            persistent_workers=True, batch_size=None)

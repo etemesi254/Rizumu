@@ -1,5 +1,6 @@
 import os
 import time
+from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -105,23 +106,27 @@ class RizumuSeparatorDataset(Dataset):
 
     def _get_audio_files(self, files_to_load: List[str]):
         audio_files = []
-        for folder_name in os.listdir(self.root_dir):
-            folder_path = os.path.join(self.root_dir, folder_name)
-            if os.path.isdir(folder_path):
-                files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.endswith('.wav')]
-                correct_path = [""] * len(files_to_load)
-                # sort based on files_to_load specification
-                for file in files:
+        try:
+            for folder_name in os.scandir(self.root_dir):
+
+                folder_path = os.path.join(self.root_dir, folder_name.path)
+                if os.path.isdir(folder_path):
+                    files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.endswith('.wav')]
+                    correct_path = [""] * len(files_to_load)
+                    # sort based on files_to_load specification
+                    for file in files:
                     # split name and remove wav part
-                    file_name = file.split("/").pop().split(".")[0]
-                    # now see name index in files_to_load index
-                    index = 0
-                    for i in files_to_load:
-                        if file_name == i:
-                            correct_path[index] = file
-                            break
-                        index += 1
-                audio_files.append(correct_path)
+                        file_name = file.split("/").pop().split(".")[0]
+                        # now see name index in files_to_load index
+                        index = 0
+                        for i in files_to_load:
+                            if file_name == i:
+                                correct_path[index] = file
+                                break
+                            index += 1
+                    audio_files.append(correct_path)
+        except Exception as e:
+            pass
         return audio_files
 
     def __len__(self):
