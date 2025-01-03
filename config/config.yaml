@@ -85,9 +85,9 @@ dnr_dataset:
     validation_set: "/Volumes/Untitled/DNR/dnr/dnr/dnr/cv"
     batch_size: 1
     shuffle: true
-    num_epochs: 50
+    num_epochs: 500
     checkpoint: True
-    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=18-step=58102.ckpt"
+    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=23-step=73392.ckpt"
     log_dir: "./chekpoints/rizumu_logs"
     use_dct: True
     quantizer: 2000

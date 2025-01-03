@@ -9,6 +9,10 @@ torchaudio~=2.5.1
 numpy~=2.0.2
 tqdm~=4.66.5
 asteroid-filterbanks==0.4.0
+# hosting
+fastapi==0.115.6
+uvicorn==0.34.0
+python-multipart==0.0.20
 
 # Model exporting
 onnx==1.17.0
