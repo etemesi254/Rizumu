@@ -4,7 +4,8 @@ from hydra import compose, initialize
 
 from bandspitrnn.train import bandspit_train
 from openunmix.train import openunmix_train
-from rizumu.train import rizumu_train, rizumu_train_oldschool
+from rizumu.server import run
+from rizumu.train import rizumu_train
 
 
 def my_app() -> None:
@@ -16,16 +17,19 @@ def my_app() -> None:
                         help="Train a bandspitrnn model with pre-configured outputs")
     parser.add_argument("--train-openunmix", action="store_true", help="Train an openunmix model with pre-configs")
     parser.add_argument("--train-rizumu", action="store_true", help="Train a rizumu model with pre-configs")
+    parser.add_argument("--serve", action="store_true", )
     args = parser.parse_args()
     if args.train_bandspitrnn:
         cfg = compose(config_name="config")
         bandspit_train(cfg)
-    elif  args.train_openunmix:
+    elif args.train_openunmix:
         cfg = compose(config_name="config")
         openunmix_train(cfg)
-    elif True or args.train_rizumu:
+    elif args.train_rizumu:
         cfg = compose(config_name="config")
         rizumu_train(cfg)
+    elif args.serve:
+        run()
     else:
         parser.print_help()
 
