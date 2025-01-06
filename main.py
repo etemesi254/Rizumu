@@ -5,7 +5,7 @@ from hydra import compose, initialize
 from bandspitrnn.train import bandspit_train
 from openunmix.train import openunmix_train
 from rizumu.server import run
-from rizumu.train import rizumu_train
+from rizumu.train import rizumu_train, rizumu_train_oldschool
 
 
 def my_app() -> None:
@@ -25,7 +25,7 @@ def my_app() -> None:
     elif args.train_openunmix:
         cfg = compose(config_name="config")
         openunmix_train(cfg)
-    elif args.train_rizumu:
+    elif True or  args.train_rizumu:
         cfg = compose(config_name="config")
         rizumu_train(cfg)
     elif args.serve:

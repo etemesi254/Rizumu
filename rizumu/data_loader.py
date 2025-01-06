@@ -136,13 +136,15 @@ class RizumuSeparatorDataset(Dataset):
         loaded_files = []
 
         for file in self.audio_files[idx]:
-            tensor, sr = load_audio(file)
-            if self.preprocess_dct:
-                tensor = preprocess_dct(tensor, self.dct_scaler)
-                loaded_files.append(torch.from_numpy(tensor).clone().to(torch.float32))
-            else:
-                loaded_files.append(tensor)
-
+            try:
+                tensor, sr = load_audio(file)
+                if self.preprocess_dct:
+                    tensor = preprocess_dct(tensor, self.dct_scaler)
+                    loaded_files.append(torch.from_numpy(tensor).clone().to(torch.float32))
+                else:
+                    loaded_files.append(tensor)
+            except Exception as e:
+                loaded_files.append(torch.zeros(1,264000))
         return loaded_files
 
 

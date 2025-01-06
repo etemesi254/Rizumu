@@ -5,14 +5,14 @@ from typing import Tuple
 import numpy as np
 import torch
 import torchaudio
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, UploadFile, File, Response
+from fastapi.middleware.cors import CORSMiddleware
 
 from rizumu.pl_model import RizumuLightning
 
-# Import your Lightning model
-# Assuming your model is in speech_extractor.py
-# from speech_extractor import SpeechExtractorModel
+origins = [
+    "*",
+]
 
 app = FastAPI(title="Speech Extractor API")
 
@@ -61,21 +61,24 @@ async def extract_speech(audio_file: UploadFile = File(...)):
             f.write(await audio_file.read())
 
         # Process the audio
-        extracted_speech,sample_rate = service.extract_speech(input_path)
+        extracted_speech, sample_rate = service.extract_speech(input_path)
 
         # Save the processed audio
         output_path = os.path.join(temp_dir, "extracted_speech.wav")
         torchaudio.save(
             output_path,
             torch.from_numpy(extracted_speech),
-            sample_rate=sample_rate  # Adjust to match your model's sample rate
+            sample_rate=sample_rate,
+            encoding="PCM_F",
+            format="wav"
         )
 
+        file_data = open(output_path, "rb").read()
         # Return the processed file
-        return FileResponse(
-            output_path,
+        return Response(
+            file_data,
             media_type="audio/wav",
-            filename="extracted_speech.wav"
+
         )
 
 
@@ -88,5 +91,27 @@ async def health_check():
 def run():
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=7000)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    uvicorn.run(app, host="0.0.0.0", port=9000)
 
+
+if __name__ == "__main__":
+    # run()
+    model = RizumuLightning.load_from_checkpoint(
+        "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=49-step=53350.ckpt")
+    model.eval()
+    audio, sr = torchaudio.load("/Users/etemesi/Datasets/312/mix.wav")
+    output = model(audio)
+    torchaudio.save(
+        "./tt.wav",
+        output.detach().cpu(),
+        sample_rate=44100,
+        encoding="PCM_F",
+        format="wav"
+    )

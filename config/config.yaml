@@ -80,17 +80,17 @@ dnr_dataset:
     mix_name: "mix"
     labels: [ "mix", "speech" ]
     output_label: "speech"
-    training_set: "/Volumes/Untitled/DNR/dnr/dnr/dnr/train"
-    testing_set: "/Volumes/Untitled/DNR/dnr/dnr/dnr/tt"
+    training_set: "/Volumes/Untitled/DNR/dnr_v2/dnr.part/dnr_v2/tr"
+    testing_set: "/Volumes/Untitled/DNR/dnr_v2/dnr.part/dnr_v2/tt"
     validation_set: "/Volumes/Untitled/DNR/dnr/dnr/dnr/cv"
     batch_size: 1
     shuffle: true
     num_epochs: 500
     checkpoint: True
-    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=23-step=73392.ckpt"
+    checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=49-step=53350.ckpt"
     log_dir: "./chekpoints/rizumu_logs"
     use_dct: True
-    quantizer: 2000
+    quantizer: 2500
     lstm_layers: 2
     num_splits: 1
     hidden_size: 512

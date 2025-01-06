@@ -6,10 +6,10 @@ from rizumu.pl_model import RizumuLightning
 
 def export_onnx(filename: str = "./rizumu_onnx.onnx"):
     model = RizumuLightning.load_from_checkpoint(
-        "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=51-step=59466.ckpt")
+        "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=49-step=53350.ckpt")
     #model = RizumuLightning(labels=["mix","speech"],output_label_name="speech",mix_name="mix",num_splits=1)
     # input and output are dynamic, so we can send anything
-    sample_input,sr = torchaudio.load("/Volumes/Untitled/DNR/dnr/dnr/dnr/tt/312/mix.wav")
+    sample_input,sr = torchaudio.load("/Users/etemesi/PycharmProjects/Rizumu/audio.wav")
 
     #torch.onnx.export(do_constant_folding=)
     # model.to_onnx(filename, sample_input,
@@ -75,12 +75,12 @@ if __name__ == '__main__':
     #
     # print(np.testing.assert_allclose(onnx, output_run))
     export_onnx()
-    a,_ = torchaudio.load("/Volumes/Untitled/DNR/dnr/dnr/dnr/tt/312/speech.wav")
-    b,_ =torchaudio.load("/Users/etemesi/PycharmProjects/Rizumu/rizumu/older_model.wav")
-    c,_ = torchaudio.load("/Users/etemesi/PycharmProjects/Rizumu/rizumu/newer_model.wav")
-    d = torch.nn.functional.mse_loss(a,b)
-    e = torch.nn.functional.mse_loss(a,c)
-
-    print(f"SDR :{calculate_sdr(a,b)} loss: {d}")
-    print(f"SDR :{calculate_sdr(a,c)} loss: {e}")
+    # a,_ = torchaudio.load("/Volumes/Untitled/DNR/dnr/dnr/dnr/tt/312/speech.wav")
+    # b,_ =torchaudio.load("/Users/etemesi/PycharmProjects/Rizumu/rizumu/older_model.wav")
+    # c,_ = torchaudio.load("/Users/etemesi/PycharmProjects/Rizumu/rizumu/newer_model.wav")
+    # d = torch.nn.functional.mse_loss(a,b)
+    # e = torch.nn.functional.mse_loss(a,c)
+    #
+    # print(f"SDR :{calculate_sdr(a,b)} loss: {d}")
+    # print(f"SDR :{calculate_sdr(a,c)} loss: {e}")
 

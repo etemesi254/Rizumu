@@ -185,7 +185,6 @@ class SourceSeparationModel(nn.Module):
         self.final = nn.Sequential(
             nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
             nn.Conv2d(32, output_channels, kernel_size=1),
-            nn.ReLU()
         )
 
     def forward(self, x):

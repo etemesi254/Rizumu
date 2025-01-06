@@ -123,8 +123,7 @@ class RizumuLightning(pl.LightningModule):
 
         self.log(f"{prefix}_loss", loss, prog_bar=True)
         self.log(f"{prefix}_sdr", sdr, prog_bar=True)
-        new_loss = loss + (100 - sdr) / 100
-        return new_loss
+        return loss
 
     def training_step(self, batch: List[torch.Tensor], batch_idx):
         # from our batch  place labels with
