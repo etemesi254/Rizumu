@@ -1,13 +1,10 @@
 import os
 import tempfile
-from typing import Tuple
 
-import numpy as np
-import torch
-import torchaudio
 from fastapi import FastAPI, UploadFile, File, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from rizumu.convert_file import convert_file
 from rizumu.pl_model import RizumuLightning
 
 origins = [
@@ -16,35 +13,10 @@ origins = [
 
 app = FastAPI(title="Speech Extractor API")
 
-
-class SpeechExtractorService:
-    def __init__(self, model_path: str):
-        # Load your model here
-        self.model = RizumuLightning.load_from_checkpoint(model_path)
-        self.model.eval()
-        self.model.to('cuda' if torch.cuda.is_available() else 'cpu')
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    @torch.no_grad()
-    def extract_speech(self, audio_path: str) -> Tuple[np.ndarray, int]:
-        # Load audio file
-        waveform, sample_rate = torchaudio.load(audio_path)
-        waveform = waveform.to(self.device)
-
-        # Process through your model
-        extracted_speech = self.model(waveform)
-        # Replace the above line with your actual model inference
-
-        # For demonstration, just returning the input
-        # extracted_speech = waveform
-
-        return (extracted_speech.cpu().numpy(), sample_rate)
-
-
 # Initialize the service
 # Replace with your model checkpoint path
 MODEL_PATH = "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=49-step=53350.ckpt"
-service = SpeechExtractorService(MODEL_PATH)
+model = RizumuLightning.load_from_checkpoint(MODEL_PATH)
 
 
 @app.post("/extract-speech")
@@ -59,26 +31,14 @@ async def extract_speech(audio_file: UploadFile = File(...)):
         input_path = os.path.join(temp_dir, "input.wav")
         with open(input_path, "wb") as f:
             f.write(await audio_file.read())
-
-        # Process the audio
-        extracted_speech, sample_rate = service.extract_speech(input_path)
-
-        # Save the processed audio
-        output_path = os.path.join(temp_dir, "extracted_speech.wav")
-        torchaudio.save(
-            output_path,
-            torch.from_numpy(extracted_speech),
-            sample_rate=sample_rate,
-            encoding="PCM_F",
-            format="wav"
-        )
+        output_path = os.path.join(temp_dir, "output.wav")
+        convert_file(input_path, output_path, model)
 
         file_data = open(output_path, "rb").read()
         # Return the processed file
         return Response(
             file_data,
             media_type="audio/wav",
-
         )
 
 
@@ -102,16 +62,4 @@ def run():
 
 
 if __name__ == "__main__":
-    # run()
-    model = RizumuLightning.load_from_checkpoint(
-        "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=49-step=53350.ckpt")
-    model.eval()
-    audio, sr = torchaudio.load("/Users/etemesi/Datasets/312/mix.wav")
-    output = model(audio)
-    torchaudio.save(
-        "./tt.wav",
-        output.detach().cpu(),
-        sample_rate=44100,
-        encoding="PCM_F",
-        format="wav"
-    )
+    run()

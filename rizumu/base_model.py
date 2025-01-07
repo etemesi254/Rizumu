@@ -231,11 +231,11 @@ if __name__ == "__main__":
     import torchinfo
     import torchaudio
 
-    audio, sr = torchaudio.load("/Users/etemesi/Datasets/dnr_v2/cv/258/mix.wav")
+    audio, sr = torchaudio.load("/Users/etemesi/Datasets/312/mix.wav")
     stft = torch.stft(audio, n_fft=2048, return_complex=True, window=torch.hann_window(2048))
     stft = stft.unsqueeze(0).to("mps")
 
-    model = SourceSeparationModel(input_channels=1, output_channels=1, depth=4, hidden_size=512, lstm_layers=1).to(
+    model = SourceSeparationModel(input_channels=1, output_channels=1, depth=4, hidden_size=1024, lstm_layers=1).to(
         "mps")
     s = torch.abs(stft).to("mps")
     c = torchinfo.summary(model, input_data=s, device="mps", depth=4)

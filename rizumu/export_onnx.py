@@ -9,7 +9,7 @@ def export_onnx(filename: str = "./rizumu_onnx.onnx"):
         "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=49-step=53350.ckpt")
     #model = RizumuLightning(labels=["mix","speech"],output_label_name="speech",mix_name="mix",num_splits=1)
     # input and output are dynamic, so we can send anything
-    sample_input,sr = torchaudio.load("/Users/etemesi/PycharmProjects/Rizumu/audio.wav")
+    sample_input,sr = torchaudio.load("/Users/etemesi/Downloads/audio-2.wav")
 
     #torch.onnx.export(do_constant_folding=)
     # model.to_onnx(filename, sample_input,
