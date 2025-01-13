@@ -114,7 +114,6 @@ class RizumuLightning(pl.LightningModule):
         return mix_input, expected_output
 
     def calculate_properties(self, output_istft: torch.Tensor, speech_istft: torch.Tensor, prefix: str) -> torch.Tensor:
-        # perform istft
         output_istft = output_istft.squeeze().to("cpu")
         speech_istft = speech_istft.squeeze().to("cpu")
 

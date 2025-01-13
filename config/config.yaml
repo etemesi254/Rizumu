@@ -77,20 +77,34 @@ dnr_dataset:
       nb_bins: 2049
       nb_channels: 1
   rizumu:
+    # file containing the mix
     mix_name: "mix"
+    # files to load from each directory
     labels: [ "mix", "speech" ]
+    # the output of the file we want to etract
     output_label: "speech"
+    # directories containing train and test sets
     training_set: "/Volumes/Untitled/DNR/dnr_v2/dnr.part/dnr_v2/tr"
     testing_set: "/Volumes/Untitled/DNR/dnr_v2/dnr.part/dnr_v2/tt"
     validation_set: "/Volumes/Untitled/DNR/dnr/dnr/dnr/cv"
+    # number of batches
     batch_size: 1
+    # whether to shuffle training data
     shuffle: true
-    num_epochs: 500
+    # number of epochs for the training part
+    num_epochs: 50
+    # Whether training resumes from a previous steps or starts from scratch
     checkpoint: True
+    # If we are starting from a checkpoint, the path to that checkpoint
     checkpoint_path: "/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=49-step=53350.ckpt"
+    # Log directories
     log_dir: "./chekpoints/rizumu_logs"
+    # whether DCT is applied as a preprocessing step
     use_dct: True
     quantizer: 2500
+    # number of LSTM layers we stack on top of each other
     lstm_layers: 2
+    # how many bands to split the audio spectrogram in
     num_splits: 1
+    # hidden size of the LSTM layer
     hidden_size: 512

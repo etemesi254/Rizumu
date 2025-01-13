@@ -15,48 +15,38 @@ from rizumu.pl_model import RizumuLightning, calculate_sdr
 
 def rizumu_train(cfg: DictConfig):
     model_config = cfg["dnr_dataset"]["rizumu"]
-
     dnr_dataset_train = RizumuSeparatorDataset(root_dir=model_config["training_set"],
                                      files_to_load=model_config["labels"],
                                      preprocess_dct=model_config["use_dct"],
                                      dct_scaler=model_config["quantizer"])
-
-
     # divide the dataset into train and test
     dnr_dataset_val = RizumuSeparatorDataset(root_dir=model_config["testing_set"],
                                                files_to_load=model_config["labels"],
                                                preprocess_dct=model_config["use_dct"],
                                                dct_scaler=model_config["quantizer"])
-
     dnr_train = DataLoader(dataset=dnr_dataset_train, num_workers=os.cpu_count(),
                            persistent_workers=True, batch_size=None)
 
     dnr_val = DataLoader(dataset=dnr_dataset_val, num_workers=os.cpu_count(),
                          persistent_workers=True, batch_size=None)
-
     labels = model_config["labels"]
     output_label_name = model_config["output_label"]
     mix_label_name = model_config["mix_name"]
     num_splits = model_config["num_splits"]
     hidden_size = model_config["hidden_size"]
     lstm_layers = model_config["lstm_layers"]
-
     checkpoint_callback = ModelCheckpoint(dirpath=model_config["log_dir"])
-
     pl_model = RizumuLightning(labels=labels,
                                output_label_name=output_label_name,
                                num_splits=num_splits,
                                hidden_size=hidden_size,
-                               mix_name=mix_label_name,
-                               n_fft=2048,
-                               depth=4,
-                               lstm_layers=lstm_layers)
+                               mix_name=mix_label_name, n_fft=2048,
+                               depth=4,lstm_layers=lstm_layers)
 
     # mps accelerator generates,nan seems like a pytorch issue
     # see https://discuss.pytorch.org/t/device-mps-is-producing-nan-weights-in-nn-embedding/159067
     trainer = pl.Trainer(max_epochs=model_config["num_epochs"], log_every_n_steps=2,
                          callbacks=[checkpoint_callback])
-
     if model_config["checkpoint"]:
         # load the checkpoint path and resume training
         trainer.fit(pl_model, dnr_train, dnr_val, ckpt_path=model_config["checkpoint_path"])

@@ -5,13 +5,12 @@ import numpy as np
 import torch
 import torchaudio
 from PyQt6.QtWidgets import (QApplication, QWidget, QPushButton, QVBoxLayout,
-                             QLabel, QHBoxLayout, QComboBox)
+                             QLabel, QHBoxLayout, QComboBox, QLineEdit)
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QPainter, QColor
 import queue
 
 from rizumu.pl_model import RizumuLightning
-
 
 class AudioProcessor(QWidget):
     def __init__(self):
@@ -30,7 +29,7 @@ class AudioProcessor(QWidget):
         self.format = pyaudio.paFloat32
         self.channels = 1
         self.model = RizumuLightning.load_from_checkpoint("/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=49-step=53350.ckpt")
-
+        self.use_model = True
 
         self.setup_ui()
 
@@ -39,6 +38,7 @@ class AudioProcessor(QWidget):
 
         devices_layout = QVBoxLayout()
 
+        # Input device selection
         input_layout = QHBoxLayout()
         self.input_label = QLabel("Input Device:")
         self.input_combo = QComboBox()
@@ -47,6 +47,7 @@ class AudioProcessor(QWidget):
         input_layout.addWidget(self.input_combo)
         devices_layout.addLayout(input_layout)
 
+        # Output device selection
         output_layout = QHBoxLayout()
         self.output_label = QLabel("Output Device:")
         self.output_combo = QComboBox()
@@ -54,6 +55,28 @@ class AudioProcessor(QWidget):
         output_layout.addWidget(self.output_label)
         output_layout.addWidget(self.output_combo)
         devices_layout.addLayout(output_layout)
+
+        # Processing mode selection
+        processing_layout = QHBoxLayout()
+        self.processing_label = QLabel("Processing Mode:")
+        self.processing_combo = QComboBox()
+        self.processing_combo.addItems(["Use Model", "Direct Output"])
+        self.processing_combo.currentTextChanged.connect(self.update_processing_mode)
+        processing_layout.addWidget(self.processing_label)
+        processing_layout.addWidget(self.processing_combo)
+        devices_layout.addLayout(processing_layout)
+
+        # Buffer size / latency control
+        buffer_layout = QHBoxLayout()
+        self.buffer_label = QLabel("Buffer Size (samples):")
+        self.buffer_edit = QLineEdit(str(self.chunk))
+        self.buffer_edit.setMaximumWidth(100)
+        self.latency_label = QLabel(f"Latency: {(self.chunk/self.rate)*1000:.1f} ms")
+        self.buffer_edit.textChanged.connect(self.update_buffer_size)
+        buffer_layout.addWidget(self.buffer_label)
+        buffer_layout.addWidget(self.buffer_edit)
+        buffer_layout.addWidget(self.latency_label)
+        devices_layout.addLayout(buffer_layout)
 
         self.layout.addLayout(devices_layout)
 
@@ -95,18 +118,33 @@ class AudioProcessor(QWidget):
         self.layout.addLayout(waveforms_layout)
         self.setLayout(self.layout)
 
-    def populate_devices(self, combo, is_input):
-        for i in range(self.audio.get_device_count()):
-            device_info = self.audio.get_device_info_by_index(i)
-            if (is_input and device_info['maxInputChannels'] > 0) or \
-                    (not is_input and device_info['maxOutputChannels'] > 0):
-                combo.addItem(device_info['name'], i)
+    def update_processing_mode(self, mode):
+        self.use_model = (mode == "Use Model")
+        if self.is_processing:
+            self.stop_processing()
+            self.start_processing()
+
+    def update_buffer_size(self):
+        try:
+            new_chunk = int(self.buffer_edit.text())
+            if new_chunk > 0:
+                self.chunk = new_chunk
+                latency_ms = (self.chunk / self.rate) * 1000
+                self.latency_label.setText(f"Latency: {latency_ms:.1f} ms")
+                if self.is_processing:
+                    self.stop_processing()
+                    self.start_processing()
+        except ValueError:
+            pass
 
     def process_audio(self, in_data, frame_count, time_info, status):
         audio_data = np.frombuffer(in_data, dtype=np.float32)
         self.input_waveform.update_waveform(audio_data)
 
-        processed_data = self.apply_model(audio_data)
+        if self.use_model:
+            processed_data = self.apply_model(audio_data)
+        else:
+            processed_data = audio_data
 
         if self.is_recording:
             self.recorded_frames.append(processed_data.tobytes())
@@ -118,9 +156,15 @@ class AudioProcessor(QWidget):
         tensor = torch.from_numpy(audio_data).clone()
         tensor = tensor.unsqueeze(0)
         output: torch.Tensor = self.model(tensor).squeeze()
-
         return output.detach().numpy() * 3.0
-        #return audio_data
+
+    # Rest of the methods remain the same
+    def populate_devices(self, combo, is_input):
+        for i in range(self.audio.get_device_count()):
+            device_info = self.audio.get_device_info_by_index(i)
+            if (is_input and device_info['maxInputChannels'] > 0) or \
+                    (not is_input and device_info['maxOutputChannels'] > 0):
+                combo.addItem(device_info['name'], i)
 
     def toggle_processing(self):
         if not self.is_processing:
@@ -140,6 +184,8 @@ class AudioProcessor(QWidget):
         self.record_button.setEnabled(True)
         self.input_combo.setEnabled(False)
         self.output_combo.setEnabled(False)
+        self.processing_combo.setEnabled(False)
+        self.buffer_edit.setEnabled(False)
 
         input_device = self.input_combo.currentData()
         output_device = self.output_combo.currentData()
@@ -157,7 +203,7 @@ class AudioProcessor(QWidget):
         )
 
         self.stream.start_stream()
-        self.status_label.setText("Status: Processing")
+        self.status_label.setText(f"Status: Processing ({'Model' if self.use_model else 'Direct'})")
 
     def stop_processing(self):
         if hasattr(self, 'stream'):
@@ -169,6 +215,8 @@ class AudioProcessor(QWidget):
         self.record_button.setEnabled(False)
         self.input_combo.setEnabled(True)
         self.output_combo.setEnabled(True)
+        self.processing_combo.setEnabled(True)
+        self.buffer_edit.setEnabled(True)
         self.status_label.setText("Status: Stopped")
 
         if self.is_recording:
@@ -179,13 +227,13 @@ class AudioProcessor(QWidget):
         self.is_recording = True
         self.record_button.setText("Stop Recording")
         self.save_button.setEnabled(False)
-        self.status_label.setText("Status: Processing and Recording")
+        self.status_label.setText(f"Status: Processing ({'Model' if self.use_model else 'Direct'}) and Recording")
 
     def stop_recording(self):
         self.is_recording = False
         self.record_button.setText("Start Recording")
         self.save_button.setEnabled(True)
-        self.status_label.setText("Status: Processing")
+        self.status_label.setText(f"Status: Processing ({'Model' if self.use_model else 'Direct'})")
 
     def save_recording(self):
         if not self.recorded_frames:
@@ -202,6 +250,7 @@ class AudioProcessor(QWidget):
         self.save_button.setEnabled(False)
 
 
+# WaveformWidget class remains unchanged
 class WaveformWidget(QWidget):
     def __init__(self):
         super().__init__()

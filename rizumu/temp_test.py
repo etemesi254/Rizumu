@@ -10,20 +10,15 @@ from rizumu.pl_model import RizumuLightning, calculate_sdr
 
 def load_and_iter(base_dir: str, checkpoint: str):
     model = RizumuLightning.load_from_checkpoint(checkpoint)
-
     model.eval()
-
     total_sdr = 0
     total_loss = 0
-
     dnr_dataset_train = RizumuSeparatorDataset(root_dir=base_dir,
                                                files_to_load=["mix", "speech"],
                                                preprocess_dct=True,
                                                dct_scaler=2000)
-
     dnr_train = DataLoader(dataset=dnr_dataset_train, num_workers=os.cpu_count(),
                            persistent_workers=True, batch_size=None)
-
     device = "mps"
     model = model.to(device, non_blocking=False)
     i=0
@@ -51,5 +46,5 @@ def load_and_iter(base_dir: str, checkpoint: str):
     print("AVG Loss", total_loss.item()/i)
 
 if __name__ == '__main__':
-    load_and_iter('/Volumes/Untitled/DNR/dnr/dnr/dnr/tt',
-                  checkpoint='/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=26-step=82566.ckpt')
+    load_and_iter('/Volumes/Untitled/DNR/dnr_v2/dnr.part/dnr_v2/tt',
+                  checkpoint='/Users/etemesi/PycharmProjects/Rizumu/chekpoints/rizumu_logs/epoch=57-step=64422.ckpt')
